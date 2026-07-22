@@ -17,7 +17,7 @@
 .OUTPUTS
 C:\ProgramData\Debloat\Debloat.log
 .NOTES
-  Version:        5.5.7
+  Version:        5.5.8
   Author:         Andrew Taylor
   Twitter:        @AndrewTaylor_2
   WWW:            andrewstaylor.com
@@ -178,6 +178,7 @@ C:\ProgramData\Debloat\Debloat.log
   Change 27/05/2026 - Defaultuser0 start menu fix (thanks to https://github.com/likwidtek)
   Change 04/06/2026 - Added shortcuts from Start Menu on German builds
   Change 27/06/2026 - Apply all HKCU settings to default user hive for new user support
+  Change 16/07/2026 - Added better regex to stop Dell Command Update from removing anything with update in the name
 N/A
 #>
 
@@ -1323,21 +1324,21 @@ reg load HKU\temphive "c:\users\default\ntuser.dat"
 # Web Search
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Windows\CurrentVersion\Search"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p BingSearchEnabled -Value 0
 
 # Windows Feedback
 $p = "Registry::HKU\temphive\Software\Microsoft\Siuf\Rules"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p PeriodInNanoSeconds -Value 0
 
 # Prevent bloatware / OEM apps + Spotlight lockscreen (same key)
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p ContentDeliveryAllowed -Value 0
 Set-ItemProperty $p OemPreInstalledAppsEnabled -Value 0
@@ -1351,44 +1352,44 @@ Set-ItemProperty $p RotatingLockScreenEnabled -Value 0
 # Mixed Reality Portal (only if key exists)
 $p = "Registry::HKU\temphive\Software\Microsoft\Windows\CurrentVersion\Holographic"
 If (Test-Path $p)
-{ Set-ItemProperty $p FirstRunSucceeded -Value 0 
+{ Set-ItemProperty $p FirstRunSucceeded -Value 0
 }
 
 # Live Tiles
 $p = "Registry::HKU\temphive\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p NoTileApplicationNotification -Value 1
 
 # People Taskbar (only if key exists)
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People"
 If (Test-Path $p)
-{ Set-ItemProperty $p -Name PeopleBand -Value 0 
+{ Set-ItemProperty $p -Name PeopleBand -Value 0
 }
 
 # Cortana
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Personalization\Settings"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p AcceptedPrivacyPolicy -Value 0
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\InputPersonalization"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p RestrictImplicitTextCollection -Value 1
 Set-ItemProperty $p RestrictImplicitInkCollection -Value 1
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\InputPersonalization\TrainedDataStore"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p HarvestContacts -Value 0
 
 # Learn about this picture (only if key exists)
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
 If (Test-Path $p)
-{ Set-ItemProperty $p -Name "{2cc5ca98-6485-489a-920e-b3e88a6ccce3}" -Value 1 
+{ Set-ItemProperty $p -Name "{2cc5ca98-6485-489a-920e-b3e88a6ccce3}" -Value 1
 }
 
 # Spotlight background (only if key exists)
@@ -1410,13 +1411,13 @@ If (Test-Path $p)
 # GameConfigStore (only if key exists)
 $p = "Registry::HKU\temphive\System\GameConfigStore"
 If (Test-Path $p)
-{ Set-ItemProperty $p -Name "GameDVR_Enabled" -Value 0 
+{ Set-ItemProperty $p -Name "GameDVR_Enabled" -Value 0
 }
 
 # Recall / Windows AI
 $p = "Registry::HKU\temphive\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p DisableAIDataAnalysis -Value 1
 
@@ -1435,21 +1436,21 @@ reg load HKU\temphive "c:\users\default\ntuser.dat"
 # Web Search
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Windows\CurrentVersion\Search"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p BingSearchEnabled -Value 0
 
 # Windows Feedback
 $p = "Registry::HKU\temphive\Software\Microsoft\Siuf\Rules"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p PeriodInNanoSeconds -Value 0
 
 # Prevent bloatware / OEM apps + Spotlight lockscreen (same key)
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p ContentDeliveryAllowed -Value 0
 Set-ItemProperty $p OemPreInstalledAppsEnabled -Value 0
@@ -1463,44 +1464,44 @@ Set-ItemProperty $p RotatingLockScreenEnabled -Value 0
 # Mixed Reality Portal (only if key exists)
 $p = "Registry::HKU\temphive\Software\Microsoft\Windows\CurrentVersion\Holographic"
 If (Test-Path $p)
-{ Set-ItemProperty $p FirstRunSucceeded -Value 0 
+{ Set-ItemProperty $p FirstRunSucceeded -Value 0
 }
 
 # Live Tiles
 $p = "Registry::HKU\temphive\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p NoTileApplicationNotification -Value 1
 
 # People Taskbar (only if key exists)
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People"
 If (Test-Path $p)
-{ Set-ItemProperty $p -Name PeopleBand -Value 0 
+{ Set-ItemProperty $p -Name PeopleBand -Value 0
 }
 
 # Cortana
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Personalization\Settings"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p AcceptedPrivacyPolicy -Value 0
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\InputPersonalization"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p RestrictImplicitTextCollection -Value 1
 Set-ItemProperty $p RestrictImplicitInkCollection -Value 1
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\InputPersonalization\TrainedDataStore"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p HarvestContacts -Value 0
 
 # Learn about this picture (only if key exists)
 $p = "Registry::HKU\temphive\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
 If (Test-Path $p)
-{ Set-ItemProperty $p -Name "{2cc5ca98-6485-489a-920e-b3e88a6ccce3}" -Value 1 
+{ Set-ItemProperty $p -Name "{2cc5ca98-6485-489a-920e-b3e88a6ccce3}" -Value 1
 }
 
 # Spotlight background (only if key exists)
@@ -1522,13 +1523,13 @@ If (Test-Path $p)
 # GameConfigStore (only if key exists)
 $p = "Registry::HKU\temphive\System\GameConfigStore"
 If (Test-Path $p)
-{ Set-ItemProperty $p -Name "GameDVR_Enabled" -Value 0 
+{ Set-ItemProperty $p -Name "GameDVR_Enabled" -Value 0
 }
 
 # Recall / Windows AI
 $p = "Registry::HKU\temphive\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"
 If (!(Test-Path $p))
-{ New-Item $p -Force | Out-Null 
+{ New-Item $p -Force | Out-Null
 }
 Set-ItemProperty $p DisableAIDataAnalysis -Value 1
 
@@ -1645,7 +1646,7 @@ if (Test-Path "$env:WinDir\System32\GameBarPresenceWriter.exe")
     $NewAcl = Get-Acl -Path "$env:WinDir\System32\GameBarPresenceWriter.exe"
     # Set properties
     $adminGroupName = (Get-CimInstance Win32_Group -Filter "SID='S-1-5-32-544'" -ErrorAction SilentlyContinue).Name
-    $identity = "$builtin\$adminGroupName"    
+    $identity = "$builtin\$adminGroupName"
     $fileSystemRights = "FullControl"
     $type = "Allow"
     # Create new rule
@@ -1881,7 +1882,7 @@ function parseExeUninstall
     )
 
     $pattern = ' +(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)'
-    
+
     return $exeString -split $pattern
 }
 
@@ -1914,13 +1915,13 @@ function UninstallAppFull
 
         $uninstallString = $app.UninstallString
         $displayName = $app.DisplayName
-        
+
         Write-Output "Calling Uninstaller for: $displayName"
         if ($uninstallString -match "^\s*(C:\\Windows\\System32\\)?msiexec(\.exe)?\s+\S*")
         {
             Write-Output "MSI Uninstall detected"
             #MSI install, replace the I with an X and make it quiet
-          
+
             $uninstallString -match '(?<content>{.*})' | Out-Null # Out-Null avoids "True" being output without context.
             $GUID = $matches['content']
             $uninstallArgs = @(
@@ -1931,9 +1932,9 @@ function UninstallAppFull
                 '/qn'
             )
             $uninstaller = "msiexec.exe"
-            
+
             Write-Output "Uninstall Arguments: $uninstallArgs"
-            
+
             # To refactorize back to a single uninstall call, remove here to the next comment. From here...
             try
             {
@@ -1954,7 +1955,7 @@ function UninstallAppFull
             $parsedString = parseExeUninstall -exeString $uninstallString
             $uninstallArgs = $parsedString | Select-Object -Skip 1
             $uninstaller = $parsedString[0]
-            
+
             # To refactorize back to a single uninstall call, remove here to the next comment. From here...
             try
             {
@@ -1969,7 +1970,7 @@ function UninstallAppFull
             }
             # ... to here.
         }
-        
+
         <# Remove this line and it's accompanying end cap to make this section live.
        try {
           Start-Process $uninstaller -ArgumentList $uninstallArgs
@@ -1982,7 +1983,7 @@ function UninstallAppFull
             Write-Output "Error thrown: $($_.Exception.Message)"
        }
        I'm the end cap! Don't forget to remove me, if you remove my parent! #>
-       
+
     }
 }
 
@@ -2116,31 +2117,31 @@ if ($manufacturer -like "*HP*")
 
     ##Remove other crap
     if (Test-Path -Path "C:\Program Files (x86)\HP\Shared" -PathType Container)
-    { Remove-Item -Path "C:\Program Files (x86)\HP\Shared" -Recurse -Force 
+    { Remove-Item -Path "C:\Program Files (x86)\HP\Shared" -Recurse -Force
     }
     if (Test-Path -Path "C:\Program Files (x86)\Online Services" -PathType Container)
-    { Remove-Item -Path "C:\Program Files (x86)\Online Services" -Recurse -Force 
+    { Remove-Item -Path "C:\Program Files (x86)\Online Services" -Recurse -Force
     }
     if (Test-Path -Path "C:\ProgramData\HP\TCO" -PathType Container)
-    { Remove-Item -Path "C:\ProgramData\HP\TCO" -Recurse -Force 
+    { Remove-Item -Path "C:\ProgramData\HP\TCO" -Recurse -Force
     }
     if (Test-Path -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Amazon.com.lnk" -PathType Leaf)
-    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Amazon.com.lnk" -Force 
+    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Amazon.com.lnk" -Force
     }
     if (Test-Path -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Angebote.lnk" -PathType Leaf)
-    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Angebote.lnk" -Force 
+    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Angebote.lnk" -Force
     }
     if (Test-Path -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\TCO Certified.lnk" -PathType Leaf)
-    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\TCO Certified.lnk" -Force 
+    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\TCO Certified.lnk" -Force
     }
     if (Test-Path -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Booking.com.lnk" -PathType Leaf)
-    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Booking.com.lnk" -Force 
+    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Booking.com.lnk" -Force
     }
     if (Test-Path -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Adobe offers.lnk" -PathType Leaf)
-    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Adobe offers.lnk" -Force 
+    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Adobe offers.lnk" -Force
     }
     if (Test-Path -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Miro Offer.lnk" -PathType Leaf)
-    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Miro offer.lnk" -Force 
+    { Remove-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Miro offer.lnk" -Force
     }
 
     ##Remove Wolf Security
@@ -2165,25 +2166,25 @@ if ($manufacturer -like "*HP*")
         $patternName = $pattern.Name
         $minVersion = $pattern.MinVersion
         Write-Output "Checking for packages matching pattern: $patternName"
-    
+
         # Search for matching packages in the registry
         $matchingPackages = @()
-    
+
         # Check in 32-bit and 64-bit registry locations
         $registryPaths = @(
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
             "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
         )
-    
+
         foreach ($registryPath in $registryPaths)
         {
-            $packages = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue | 
-                Where-Object { $_.DisplayName -match $patternName }
-        
+            $packages = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -match [regex]::Escape([regex]::Esc)ape($patternName) }
+
             # Filter by minimum version if specified
             if ($minVersion -and $packages)
             {
-                $packages = $packages | Where-Object { 
+                $packages = $packages | Where-Object {
                     if ($_.DisplayVersion)
                     {
                         try
@@ -2201,18 +2202,18 @@ if ($manufacturer -like "*HP*")
                     }
                 }
             }
-        
+
             $matchingPackages += $packages
         }
-    
+
         if ($matchingPackages.Count -eq 0)
         {
             Write-Output "No packages found matching pattern: $patternName"
             continue
         }
-    
+
         Write-Output "Found $($matchingPackages.Count) package(s) matching pattern: $patternName"
-    
+
         # Process each matching package
         foreach ($package in $matchingPackages)
         {
@@ -2220,13 +2221,13 @@ if ($manufacturer -like "*HP*")
             $uninstallString = $package.UninstallString
             $quietUninstallString = $package.QuietUninstallString
             $version = $package.DisplayVersion
-        
+
             Write-Output "Attempting to uninstall: $displayName (Version: $version)"
-        
+
             # Try to use the UninstallAppFull function first
             Write-Output "Trying to uninstall via UninstallAppFull..."
             UninstallAppFull -appName $displayName
-        
+
             # If UninstallAppFull doesn't work, fall back to direct uninstallation
             # Check if uninstall string exists and attempt uninstall
             if ($quietUninstallString)
@@ -2245,11 +2246,11 @@ if ($manufacturer -like "*HP*")
                         $uninstallParts = $quietUninstallString -split ' ', 2
                         $uninstallExe = $uninstallParts[0].Trim('"')
                         $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1] 
+                        { $uninstallParts[1]
                         } else
-                        { "" 
+                        { ""
                         }
-                    
+
                         Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
                     }
                     Write-Output "Quiet uninstall completed for: $displayName"
@@ -2278,17 +2279,17 @@ if ($manufacturer -like "*HP*")
                         $uninstallParts = $uninstallString -split ' ', 2
                         $uninstallExe = $uninstallParts[0].Trim('"')
                         $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1] 
+                        { $uninstallParts[1]
                         } else
-                        { "" 
+                        { ""
                         }
-                    
+
                         # Add silent parameters for common installers
                         if ($uninstallString -match "uninstall.exe|uninst.exe|setup.exe|installer.exe")
                         {
                             $uninstallArgs += " /S /silent /quiet /uninstall"
                         }
-                    
+
                         Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
                     }
                     Write-Output "Standard uninstall completed for: $displayName"
@@ -2309,7 +2310,7 @@ if ($manufacturer -like "*HP*")
     ##        if ($ResolveWingetPath){
     ##               $WingetPath = $ResolveWingetPath[-1].Path
     ##        }
-    
+
     ##    $Winget = $WingetPath + "\winget.exe"
     ##    &$winget install --id "$appid" --silent --force --accept-package-agreements --accept-source-agreements --exact | out-null
 
@@ -2420,22 +2421,22 @@ if ($manufacturer -like "*Dell*")
 
         # Search for matching packages in the registry
         $matchingPackages = @()
-    
+
         # Check in 32-bit and 64-bit registry locations
         $registryPaths = @(
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
             "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
         )
-    
+
         foreach ($registryPath in $registryPaths)
         {
-            $packages = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue | 
-                Where-Object { $_.DisplayName -match $patternName }
-        
+            $packages = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -match [regex]::Escape([regex]::Esc)ape($patternName) }
+
             # Filter by minimum version if specified
             if ($minVersion -and $packages)
             {
-                $packages = $packages | Where-Object { 
+                $packages = $packages | Where-Object {
                     if ($_.DisplayVersion)
                     {
                         try
@@ -2453,18 +2454,18 @@ if ($manufacturer -like "*Dell*")
                     }
                 }
             }
-        
+
             $matchingPackages += $packages
         }
-    
+
         if ($matchingPackages.Count -eq 0)
         {
             Write-Output "No packages found matching pattern: $patternName"
             continue
         }
-    
+
         Write-Output "Found $($matchingPackages.Count) package(s) matching pattern: $patternName"
-    
+
         # Process each matching package
         foreach ($package in $matchingPackages)
         {
@@ -2472,13 +2473,13 @@ if ($manufacturer -like "*Dell*")
             $uninstallString = $package.UninstallString
             $quietUninstallString = $package.QuietUninstallString
             $version = $package.DisplayVersion
-        
+
             Write-Output "Attempting to uninstall: $displayName (Version: $version)"
-        
+
             # Try to use the UninstallAppFull function first
             Write-Output "Trying to uninstall via UninstallAppFull..."
             UninstallAppFull -appName $displayName
-        
+
             # If UninstallAppFull doesn't work, fall back to direct uninstallation
             # Check if uninstall string exists and attempt uninstall
             if ($quietUninstallString)
@@ -2497,11 +2498,11 @@ if ($manufacturer -like "*Dell*")
                         $uninstallParts = $quietUninstallString -split ' ', 2
                         $uninstallExe = $uninstallParts[0].Trim('"')
                         $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1] 
+                        { $uninstallParts[1]
                         } else
-                        { "" 
+                        { ""
                         }
-                    
+
                         Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
                     }
                     Write-Output "Quiet uninstall completed for: $displayName"
@@ -2530,17 +2531,17 @@ if ($manufacturer -like "*Dell*")
                         $uninstallParts = $uninstallString -split ' ', 2
                         $uninstallExe = $uninstallParts[0].Trim('"')
                         $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1] 
+                        { $uninstallParts[1]
                         } else
-                        { "" 
+                        { ""
                         }
-                    
+
                         # Add silent parameters for common installers
                         if ($uninstallString -match "uninstall.exe|uninst.exe|setup.exe|installer.exe")
                         {
                             $uninstallArgs += " /S /silent /quiet /uninstall"
                         }
-                    
+
                         Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
                     }
                     Write-Output "Standard uninstall completed for: $displayName"
@@ -3103,22 +3104,22 @@ if ($manufacturer -like "*Samsung*")
 
         # Search for matching packages in the registry
         $matchingPackages = @()
-    
+
         # Check in 32-bit and 64-bit registry locations
         $registryPaths = @(
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
             "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
         )
-    
+
         foreach ($registryPath in $registryPaths)
         {
-            $packages = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue | 
-                Where-Object { $_.DisplayName -match $patternName }
-        
+            $packages = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -match [regex]::Escape([regex]::Esc)ape($patternName) }
+
             # Filter by minimum version if specified
             if ($minVersion -and $packages)
             {
-                $packages = $packages | Where-Object { 
+                $packages = $packages | Where-Object {
                     if ($_.DisplayVersion)
                     {
                         try
@@ -3136,18 +3137,18 @@ if ($manufacturer -like "*Samsung*")
                     }
                 }
             }
-        
+
             $matchingPackages += $packages
         }
-    
+
         if ($matchingPackages.Count -eq 0)
         {
             Write-Output "No packages found matching pattern: $patternName"
             continue
         }
-    
+
         Write-Output "Found $($matchingPackages.Count) package(s) matching pattern: $patternName"
-    
+
         # Process each matching package
         foreach ($package in $matchingPackages)
         {
@@ -3155,13 +3156,13 @@ if ($manufacturer -like "*Samsung*")
             $uninstallString = $package.UninstallString
             $quietUninstallString = $package.QuietUninstallString
             $version = $package.DisplayVersion
-        
+
             Write-Output "Attempting to uninstall: $displayName (Version: $version)"
-        
+
             # Try to use the UninstallAppFull function first
             Write-Output "Trying to uninstall via UninstallAppFull..."
             UninstallAppFull -appName $displayName
-        
+
             # If UninstallAppFull doesn't work, fall back to direct uninstallation
             # Check if uninstall string exists and attempt uninstall
             if ($quietUninstallString)
@@ -3180,11 +3181,11 @@ if ($manufacturer -like "*Samsung*")
                         $uninstallParts = $quietUninstallString -split ' ', 2
                         $uninstallExe = $uninstallParts[0].Trim('"')
                         $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1] 
+                        { $uninstallParts[1]
                         } else
-                        { "" 
+                        { ""
                         }
-                    
+
                         Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
                     }
                     Write-Output "Quiet uninstall completed for: $displayName"
@@ -3213,17 +3214,17 @@ if ($manufacturer -like "*Samsung*")
                         $uninstallParts = $uninstallString -split ' ', 2
                         $uninstallExe = $uninstallParts[0].Trim('"')
                         $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1] 
+                        { $uninstallParts[1]
                         } else
-                        { "" 
+                        { ""
                         }
-                    
+
                         # Add silent parameters for common installers
                         if ($uninstallString -match "uninstall.exe|uninst.exe|setup.exe|installer.exe")
                         {
                             $uninstallArgs += " /S /silent /quiet /uninstall"
                         }
-                    
+
                         Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
                     }
                     Write-Output "Standard uninstall completed for: $displayName"
@@ -3295,7 +3296,7 @@ if ($manufacturer -like "*Acer*")
         "AcerIncorporated.4703949AD09F"
         "AcerIncorporated.AcerPurifiedVoiceConsoleR"
         "55121DominqueTerry.PasswordGeneratorTool"
-        
+
     )
 
 
@@ -3341,22 +3342,22 @@ if ($manufacturer -like "*Acer*")
 
         # Search for matching packages in the registry
         $matchingPackages = @()
-    
+
         # Check in 32-bit and 64-bit registry locations
         $registryPaths = @(
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
             "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
         )
-    
+
         foreach ($registryPath in $registryPaths)
         {
-            $packages = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue | 
-                Where-Object { $_.DisplayName -match $patternName }
-        
+            $packages = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -match [regex]::Escape([regex]::Esc)ape($patternName) }
+
             # Filter by minimum version if specified
             if ($minVersion -and $packages)
             {
-                $packages = $packages | Where-Object { 
+                $packages = $packages | Where-Object {
                     if ($_.DisplayVersion)
                     {
                         try
@@ -3374,18 +3375,18 @@ if ($manufacturer -like "*Acer*")
                     }
                 }
             }
-        
+
             $matchingPackages += $packages
         }
-    
+
         if ($matchingPackages.Count -eq 0)
         {
             Write-Output "No packages found matching pattern: $patternName"
             continue
         }
-    
+
         Write-Output "Found $($matchingPackages.Count) package(s) matching pattern: $patternName"
-    
+
         # Process each matching package
         foreach ($package in $matchingPackages)
         {
@@ -3393,13 +3394,13 @@ if ($manufacturer -like "*Acer*")
             $uninstallString = $package.UninstallString
             $quietUninstallString = $package.QuietUninstallString
             $version = $package.DisplayVersion
-        
+
             Write-Output "Attempting to uninstall: $displayName (Version: $version)"
-        
+
             # Try to use the UninstallAppFull function first
             Write-Output "Trying to uninstall via UninstallAppFull..."
             UninstallAppFull -appName $displayName
-        
+
             # If UninstallAppFull doesn't work, fall back to direct uninstallation
             # Check if uninstall string exists and attempt uninstall
             if ($quietUninstallString)
@@ -3418,11 +3419,11 @@ if ($manufacturer -like "*Acer*")
                         $uninstallParts = $quietUninstallString -split ' ', 2
                         $uninstallExe = $uninstallParts[0].Trim('"')
                         $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1] 
+                        { $uninstallParts[1]
                         } else
-                        { "" 
+                        { ""
                         }
-                    
+
                         Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
                     }
                     Write-Output "Quiet uninstall completed for: $displayName"
@@ -3451,17 +3452,17 @@ if ($manufacturer -like "*Acer*")
                         $uninstallParts = $uninstallString -split ' ', 2
                         $uninstallExe = $uninstallParts[0].Trim('"')
                         $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1] 
+                        { $uninstallParts[1]
                         } else
-                        { "" 
+                        { ""
                         }
-                    
+
                         # Add silent parameters for common installers
                         if ($uninstallString -match "uninstall.exe|uninst.exe|setup.exe|installer.exe")
                         {
                             $uninstallArgs += " /S /silent /quiet /uninstall"
                         }
-                    
+
                         Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
                     }
                     Write-Output "Standard uninstall completed for: $displayName"
@@ -3503,8 +3504,8 @@ if ($manufacturer -like "*Asus*")
     #Remove Asus bloat
 
     ##ASUS OEMcode = B9ECED6F
-	
-    ##ASUS Specific 
+
+    ##ASUS Specific
     ##You can decide which, if any, you wish to keep by including in customwhitelist
     $UninstallPrograms = @(
         "B9ECED6F.ASUSExpertWidget"											#defines F1-F4 hotkeys on Expertbook
@@ -3512,10 +3513,10 @@ if ($manufacturer -like "*Asus*")
         "AppUp.IntelGraphicsExperience"									#Intel Graphic mgmt utility	on Expertbook, Vivobook
         "AppUp.IntelManagementandSecurityStatus"				#Intel Security mgmt utility on Expertbook
         "DolbyLaboratories.DolbyAccess"									#Dolby sound utilities on Expertbook, Vivobook
-        "DolbyLaboratories.DolbyDigitalPlusDecoderOEM"	#Dolby sound utilities on Expertbook, Vivobook	
+        "DolbyLaboratories.DolbyDigitalPlusDecoderOEM"	#Dolby sound utilities on Expertbook, Vivobook
         "DrivewintechTechnologyCo.DiracAudoManager"			#sound mgmt utility in Vivobook
         "IntelligoTechnologyInc.541271065CCE8"					#suite of voice/microphone AI and Meeting utilities that Asus packages in Expertbook
-    )	
+    )
 
     $UninstallPrograms = $UninstallPrograms | Where-Object { $appstoignore -notcontains $_ }
 
@@ -3568,7 +3569,7 @@ if ($manufacturer -like "*Asus*")
     if ((Test-Path -Path $tbfile -PathType Leaf) -and ((Get-Item $tbfile).LastWriteTimeUTC -lt $startUtc))
     {
         write-output "remove asus taskbar"
-        Remove-Item -Path $tbfile -Force 
+        Remove-Item -Path $tbfile -Force
     }
     $registryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
     $reg = Get-ItemProperty -Path $registryPath -ErrorAction SilentlyContinue
@@ -3586,7 +3587,7 @@ if ($manufacturer -like "*Asus*")
         Remove-ItemProperty -Path $registryPath -Name "LayoutXMLPath" -ErrorAction SilentlyContinue
     }
 
-} 
+}
 #end ASUS specific
 
 
@@ -3691,7 +3692,7 @@ if ($mcafeeinstalled -eq "true")
             #$Null = $_ | Uninstall-Package -AllVersions -Force -ErrorAction Stop
             write-output "Successfully uninstalled: [$($_.Name)]"
         } Catch
-        { Write-Warning -Message "Failed to uninstall: [$($_.Name)]" 
+        { Write-Warning -Message "Failed to uninstall: [$($_.Name)]"
         }
     }
 
@@ -3725,11 +3726,11 @@ if ($mcafeeinstalled -eq "true")
     ##Remove webadvisor
 
     if (Test-Path "${env:ProgramFiles(x86)}\McAfee\SiteAdvisor\Uninstall.exe")
-    { Start-Process -FilePath "${env:ProgramFiles(x86)}\McAfee\SiteAdvisor\Uninstall.exe" -ArgumentList "/s" -WorkingDirectory "${env:ProgramFiles(x86)}\McAfee\SiteAdvisor" -Wait -NoNewWindow 
+    { Start-Process -FilePath "${env:ProgramFiles(x86)}\McAfee\SiteAdvisor\Uninstall.exe" -ArgumentList "/s" -WorkingDirectory "${env:ProgramFiles(x86)}\McAfee\SiteAdvisor" -Wait -NoNewWindow
     }
     Start-Sleep -Seconds 5
     if (Test-Path "${env:ProgramFiles(x86)}\McAfee")
-    { Remove-Item -Path "${env:ProgramFiles(x86)}\McAfee" -Recurse -Force 
+    { Remove-Item -Path "${env:ProgramFiles(x86)}\McAfee" -Recurse -Force
     }
 }
 
@@ -3911,8 +3912,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIIgyAYJKoZIhvcNAQcCoIIguTCCILUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD5Ku/AWjUl9LWX
-# E2qbXjOmTgJr6H7KU09sixXwVthfAKCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCcv/WQuwab6jfh
+# jLQAPYL+5+3m8tkMrUOUiTSu7k15ZqCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
 # /3YhZAcZstc+MA0GCSqGSIb3DQEBCwUAMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQK
 # ExhBc3NlY28gRGF0YSBTeXN0ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBDb2Rl
 # IFNpZ25pbmcgMjAyMSBDQTAeFw0yNjA3MDIxNTEwMjdaFw0yNzA3MDIxNTEwMjZa
@@ -4052,36 +4053,36 @@ Stop-Transcript
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gQ29kZSBTaWduaW5nIDIwMjEgQ0ECEBLxcD71h2D/diFkBxmy1z4wDQYJYIZI
 # AWUDBAIBBQCggYgwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYJKoZIhvcN
-# AQkFMQ8XDTI2MDcwMjE1NTAzN1owHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
-# ARUwLwYJKoZIhvcNAQkEMSIEIJVTMabwdskzagUkM0YCJuEF1vScYU5R04GPkfVS
-# d0G7MA0GCSqGSIb3DQEBAQUABIIBgKEhJqhRYYO92LrsS8D6659r/wFxFHVHzXDc
-# Ujepa24k7HTNWhgPYqkTkI7Y8xC6AEQA1VQNg6bmL9SMxaYmb4tmVIUhblJb/2g6
-# OdGmUYmgMe7sZrXh1frmvowHhwxD5VmTK0FGWGlyK1l/EVBcUY5MkNG1Z4bPk+/d
-# 0TeBVOzboEcM9Ew5McQKCs406G5hLjbFXf/RDBCxU9oF4zjyN7SryzXg+CUiQ2JH
-# o0lbnL45prKdU9zvXg6ocqcF2GO+F6mwo90ydvNEVw3gViCKsKdyKuJLLfDCil/C
-# rwRFPVDOhAfrrtCpjZ0mdFwjy8p7WDY3y3RwqQKR1iubula1uw4d+UimwpuLd3Zh
-# m21uVjWBV5immAfK+SVDqI1j3HeYHXdltzX4tiK5T65fxIXkZqm8accJLY3mWbNu
-# zNDyhJ91vJvci+fdXQotiZGuhsNni4CqZkA29eR3tYXafk0dbmHN1S2wNrBKX6Vd
-# ps+e2m+AcwXFcGKDdXB0dZ6rpaNYv6GCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
+# AQkFMQ8XDTI2MDcyMjA4NDIxMVowHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
+# ARUwLwYJKoZIhvcNAQkEMSIEII/YU0k3HqkGoGy9jq8MQOe8xVIMY266fVGo2QDb
+# /XaMMA0GCSqGSIb3DQEBAQUABIIBgA5VKo9Q8kXubIa1faH1J8rChnIUsxuy77WY
+# yMaLm5XWOAWMH2Hmps2+FKVtFKKOnZWgk8WPhrx5EvtEqflFIAxcyWqNxYiIq33A
+# SagAe0Hb1wf6YZoAuendLpsa27QS155EkbzPB3Ejbg3gi9z9tg1oiLxZ8/E89PQr
+# OEmk4tdFybWSO2cfW9dDu10fqCwM6WhpKcLj2bsokPF25OmMYwZIe2FUzoNnaqet
+# Jkt24LDN/vgN/SjW8w0sdbLo8J1p8Vfs6vzyjpQKHpF0guvRwBWDvvlLbyqmUikn
+# Kt0sjk+upET154VgPNh7dVvNzr2OoHuyy6JYm5pdka32VBk2udiZEASVxNLA+29g
+# 2+oYYgAZodUYdQVok9SeqQ5HDhCiWclu4Altd9b+s3uJcteVza1o9BiOw4qGTd8H
+# PuFG7Yz48UNQYISWhUUsPhyg4FMRhAEWzdMz/yobvObAI1Fajk+fDcKMatXDv675
+# jYE/IEJ8varW5rsOhWC01/F+TQ8h56GCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
 # 6wIBATBqMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQKExhBc3NlY28gRGF0YSBTeXN0
 # ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBUaW1lc3RhbXBpbmcgMjAyMSBDQQIQ
 # KPB3wRw2vf5fdDJHcCcuAzANBglghkgBZQMEAgIFAKCCAVYwGgYJKoZIhvcNAQkD
-# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA3MDIxNTUwMzdaMDcG
+# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA3MjIwODQyMTJaMDcG
 # CyqGSIb3DQEJEAIvMSgwJjAkMCIEIIW+kOEK0kONfMkotq9IsJqyCBd87PiwEmxY
-# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDBB1/lCnsLk0elFLVoGUc/r4P7B//FJDUia
-# 0eP1FsFeoz7ssCByIYxF/216DNrE6Y8wgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
+# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDAkKoZO8Wgd3MULf7Do5n8CNG4lvDaguE5x
+# oFnd6eJx3LlBgrJmlHxaKS2AVS9pNAwwgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
 # MIGGBBRXFGhBDKha80JO+RZKUTYQ9NONmDBuMFqkWDBWMQswCQYDVQQGEwJQTDEh
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gVGltZXN0YW1waW5nIDIwMjEgQ0ECECjwd8EcNr3+X3QyR3AnLgMwDQYJKoZI
-# hvcNAQEBBQAEggIAeUFuZHizE4LconZTjDI4oLShKXA2D1Y/VQsaCk/vls0zVi67
-# /IRmHNnMEv/9DzczuWh2sGPKaE1ia3P2dxWYP+KVE5+laNzuf2BmP2TISn4wTt2W
-# aBpEqkEzXQ+rQnBnNB2J0QUzrFWfCtiMoGLBJ3JlmoeIrzCDa246nEJkXzh+sC+g
-# TKidIDuGLs4FWcZ+hLIKYjsn9j/sRFKA8gmsYEKy9UXApVBMQnkG12klhGZuCsVf
-# vAO9Xpxj/PlBMr9IJq5M+dBf0wRQnmopo5TS64PQnEw3tFKkHcoT5P1mXvwhkwGP
-# VDyMI5hoOe4YwqFWPPKIvqYkqmN1gqgEcDWNJI+qIcGADguMoKiXOAG8uk5eh+YU
-# H5v20mpZeOXv5Gu2SyVG8KVmujO2lRShtz1LG0YJiGzTJpG2RNamIpkbjOqqbFtG
-# o9Igu5GX4uZhCkUXchGz7cuGdyr8UPmfUj1BN66/YvHKlycyR7mIoc6CLA1oKDjL
-# zgG+1XaNRqkA5qESsIdFUrp6C3PAlYv93YZIfvg6w5l8v+92JE/fsH5NX80Bo0Xm
-# BuzETe8q386MfcCGWZuIRUtX3/9gAz0akhfPM4QtXvwGyH5njfTMuipCpTAvgR6U
-# ghgzHSJLb7+p1Ecey/qT8EYV1JV09u2l8nxTPmy3npPJzMOP+yr0jch+uiY=
+# hvcNAQEBBQAEggIADVJ7BixX9RItYRETK1nsO5FDAg6CWrk9AtcsU5ApcHjlKXVH
+# pV7XD1C2pXSvDVbAsX6vt4jbj/vwHxYnpwRULrCc5EadYSBBX/g3p/ht+eG/wLNj
+# jqLkKQyUuwf+A+4jq30Pespka6cLHK+6PzR+EMmLOaSk6vz5kCH4wevBjA3mzD3n
+# Pf34jnhbcdGTzrhhaM0jCoO4DllI522X2FOCnv5cwVmGu+1QcxKla3xUUGrRhaWl
+# P3fnQPTFqV+8M+reRu03VKMTaPz+NPIMI8Z+hHyGLx+5+oV4qai8kqNhyCRYR8wC
+# SFoQ4Ogh3zuz5qVK72nght4+rMbbwNg10TuudpEWGIpyFBC94Ug0izwyl+tI5qJ9
+# 8eD+e8gK6LO4Pltl9X8FhNGrIiLag1+GMgud7Et5H5zLvn7Jx5iiERLLeIVYWOnY
+# fhJi8zTqlED7WyTUscOZPeKNME6jBgnKrsnBBSs5N6CgmP8Vp9mgX24FUYsn4LOs
+# BYocLgs78il0D0c+12UUawYhy/EHAwFj3z12l7T7LEeYZrZ7mQYoj1IE4c+AjIjC
+# QjMCL+VLAL+c9yirrxohyaVTOx41XYbKVe0kw8zHvOU4CmJ0RDG9NAdULxTXaYSE
+# iBzK/EleIEXnCMwMgELU0NGYVSWm3y0qa0Vy3y/dMFQ2Bs9tKshERiEThoo=
 # SIG # End signature block
