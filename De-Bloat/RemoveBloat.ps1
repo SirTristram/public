@@ -17,7 +17,7 @@
 .OUTPUTS
 C:\ProgramData\Debloat\Debloat.log
 .NOTES
-  Version:        5.5.8
+  Version:        5.5.9
   Author:         Andrew Taylor
   Twitter:        @AndrewTaylor_2
   WWW:            andrewstaylor.com
@@ -179,6 +179,7 @@ C:\ProgramData\Debloat\Debloat.log
   Change 04/06/2026 - Added shortcuts from Start Menu on German builds
   Change 27/06/2026 - Apply all HKCU settings to default user hive for new user support
   Change 16/07/2026 - Added better regex to stop Dell Command Update from removing anything with update in the name
+  Change 31/07/2026 - Removed OneDrive Photos App (Thanks to Nicky De Westerlinck)
 N/A
 #>
 
@@ -1311,6 +1312,84 @@ foreach ($sid in $UserSIDs)
         New-Item $recallusers
     }
     Set-ItemProperty $recallusers DisableAIDataAnalysis -Value 1
+}
+
+
+############################################################################################################
+#                               Remove OneDrive Photos App                                                 #
+#                                                                                                          #
+############################################################################################################
+
+$relativeExePath = "AppData\Local\Microsoft\OneDrive\OneDrive.App.exe"
+$machineWideExePath = Join-Path -Path $env:ProgramFiles -ChildPath "Microsoft OneDrive\OneDrive.App.exe"
+$startMenuRelativePath = "AppData\Roaming\Microsoft\Windows\Start Menu\Programs"
+$commonStartMenuPath = Join-Path -Path $env:ProgramData -ChildPath "Microsoft\Windows\Start Menu\Programs"
+$excludedProfiles = @("Public", "Default", "Default User", "All Users")
+
+$userProfiles = Get-ChildItem -Path "$env:SystemDrive\Users" -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $excludedProfiles -notcontains $_.Name }
+
+# Remove the executable - per-user location
+foreach ($userProfile in $userProfiles)
+{
+    $targetPath = Join-Path -Path $userProfile.FullName -ChildPath $relativeExePath
+    if (Test-Path -Path $targetPath -PathType Leaf)
+    {
+        try
+        {
+            Remove-Item -Path $targetPath -Force -ErrorAction Stop
+            Write-Output "Removed: $targetPath"
+        } catch
+        {
+            Write-Output "Failed to remove: $targetPath - $($_.Exception.Message)"
+        }
+    }
+}
+
+# Remove the executable - machine-wide location
+if (Test-Path -Path $machineWideExePath -PathType Leaf)
+{
+    try
+    {
+        Remove-Item -Path $machineWideExePath -Force -ErrorAction Stop
+        Write-Output "Removed: $machineWideExePath"
+    } catch
+    {
+        Write-Output "Failed to remove: $machineWideExePath - $($_.Exception.Message)"
+    }
+}
+
+# Remove Start Menu shortcuts (per-user + all-users) pointing to the exe
+$startMenuRoots = @($commonStartMenuPath)
+foreach ($userProfile in $userProfiles)
+{
+    $startMenuRoots += Join-Path -Path $userProfile.FullName -ChildPath $startMenuRelativePath
+}
+
+$shell = New-Object -ComObject WScript.Shell
+
+foreach ($root in $startMenuRoots)
+{
+    if (-not (Test-Path -Path $root -PathType Container))
+    { continue 
+    }
+
+    $shortcuts = Get-ChildItem -Path $root -Filter "*.lnk" -Recurse -ErrorAction SilentlyContinue
+    foreach ($shortcut in $shortcuts)
+    {
+        try
+        {
+            $link = $shell.CreateShortcut($shortcut.FullName)
+            if ($link.TargetPath -and $link.TargetPath -like "*OneDrive.App.exe")
+            {
+                Remove-Item -Path $shortcut.FullName -Force -ErrorAction Stop
+                Write-Output "Removed shortcut: $($shortcut.FullName)"
+            }
+        } catch
+        {
+            Write-Output "Failed to remove shortcut: $($shortcut.FullName) - $($_.Exception.Message)"
+        }
+    }
 }
 
 ############################################################################################################
@@ -3912,8 +3991,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIIgyAYJKoZIhvcNAQcCoIIguTCCILUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCwPEca1zS39hOD
-# YSFQ1zGh/6FcojVFVR0kU7fAoAPQk6CCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAyfXe8ZtQ+k+yp
+# 4Zqu/qa+enCbN3xQQhoTzUklRD4IyaCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
 # /3YhZAcZstc+MA0GCSqGSIb3DQEBCwUAMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQK
 # ExhBc3NlY28gRGF0YSBTeXN0ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBDb2Rl
 # IFNpZ25pbmcgMjAyMSBDQTAeFw0yNjA3MDIxNTEwMjdaFw0yNzA3MDIxNTEwMjZa
@@ -4053,36 +4132,36 @@ Stop-Transcript
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gQ29kZSBTaWduaW5nIDIwMjEgQ0ECEBLxcD71h2D/diFkBxmy1z4wDQYJYIZI
 # AWUDBAIBBQCggYgwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYJKoZIhvcN
-# AQkFMQ8XDTI2MDcyMjEzMDkwNlowHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
-# ARUwLwYJKoZIhvcNAQkEMSIEIF9CGTsib806grLYfqzgcPC5CBm9oYYhP2+cd89T
-# 832FMA0GCSqGSIb3DQEBAQUABIIBgBBLkFONvsc4cEgwvwM73PafxdzrWqnp46Gd
-# FObEGjiT2WuqiY7d6d0dHO+u9BeOBcyKZ/Ct7dg2UMZ50bDnFUq+DY0C2LysOiTi
-# uISBZVuevPBruTDKejaXhHAgWKrIYb4zrsjIr7oeFIDhIRJCJHfUjPfXBHpda3L/
-# 6bteuoscCopAA/PlmPjg8MNmMlB3xVtq0XB6Xz+sQCTunwKhJLOpbIePHbW1Kz3l
-# 9uVeKiwideh4FR0MRSmmVYV3QKnoJRJRqq8u9mF+hTbl3liSDJSTnzptuG44+dgZ
-# PgTfRTo/OSnmX5h9O2WDjo4hymAIayw9g3AAjtA+A0EygvExF8LfRymHC7HPxzev
-# ezT1CMrcORvFv1sg/ZXu8u9iUJXwwxYndccG5UJB/RiR9Se/Gz1Lw1T21mlbncl+
-# wWXJE2MOVAEgCHI6SyE9SjTdNwwwexgZKhJiiaNqQCqN8cbuFmqTnix5CVIDH0ec
-# 49j4X16LfkkmzaX1Xnil7ZFutE4++KGCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
+# AQkFMQ8XDTI2MDczMTA5MjIyOVowHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
+# ARUwLwYJKoZIhvcNAQkEMSIEIMp6swTH8kf2MvKh4Xi62IuA6zaqNsWuMjOX2vv5
+# tSQ9MA0GCSqGSIb3DQEBAQUABIIBgG4fIIs6x0dIcNiRSD3GqXWtrj0Y2i65NMfl
+# m+5ts/32jkGNH10YZUwCvbf/sNeRPXfZt5RIxm8ClOchp/frh+BvFHC8m/I3WXlu
+# MqJxs1KgISg0R7pS3uvzEPhfNvFvFMwopQj36chkj8qermwPllyKTeUZ70zVx0ls
+# I+D2LEb4T7SYXuKUUc82URIJF67IRI0dy42Ul3Hoa/Uw7+cDcXot0LGO2AugvycN
+# bB70bBZUfEBaH6F+kCvBI1E0zyHAgQ+IGWk4Izu0rIa5iG7RIgunatBu995lrV5E
+# he84YT3skrWbMKKMnLaDqsz/aTbCb9D2aRMjdx0bji3Ypwp23Ym41362GhrkK3X4
+# 1mClwhNODYz0k8w6P7AYOuBBiziwKXbWufkTzuVPBIz80629jBMau3k3REt0bhAY
+# RMxUcbBnRf3QS7Ms1vBo4YEMtnvHXsiDs2aCUDWPvBtAhFbcN+iUDU6VaKfntGfD
+# XwXxzMGKe9MUVLm3P4VllYoJH7yk56GCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
 # 6wIBATBqMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQKExhBc3NlY28gRGF0YSBTeXN0
 # ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBUaW1lc3RhbXBpbmcgMjAyMSBDQQIQ
 # KPB3wRw2vf5fdDJHcCcuAzANBglghkgBZQMEAgIFAKCCAVYwGgYJKoZIhvcNAQkD
-# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA3MjIxMzA5MDdaMDcG
+# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA3MzEwOTIyMjlaMDcG
 # CyqGSIb3DQEJEAIvMSgwJjAkMCIEIIW+kOEK0kONfMkotq9IsJqyCBd87PiwEmxY
-# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDAWKnhmkIpAtuk7Kb3ZfwX6DmXZoD0k5G0F
-# ai40Tj7g8tqiVN1Blh34Tf863bywRYAwgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
+# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDAwu4aG4zvBstGdF4oxyPAziFgI9Oul2aF+
+# f8KRm4PnYraXglMt+EagQMlOj9oQip4wgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
 # MIGGBBRXFGhBDKha80JO+RZKUTYQ9NONmDBuMFqkWDBWMQswCQYDVQQGEwJQTDEh
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gVGltZXN0YW1waW5nIDIwMjEgQ0ECECjwd8EcNr3+X3QyR3AnLgMwDQYJKoZI
-# hvcNAQEBBQAEggIAG3PtCrchvuu2EBPWqJo1HZ3DXLi4KQhTGWLkX/J/cQl0tNSk
-# iNFjx5MdFvLDKE8DyqjEP5ahfJSm6Y8enIEpwcSrtrHAGgDg67orE9sxAEMMtRLn
-# RCwkdBTfl0TLyTKA5XGhsdO08sAnq2Z583jp0igVRgFYJYBdvJ5eHX4M5v/v/d0f
-# m0FlJUOZbHiPGsaYLJ4Ez6sMVZdPa1dR++e1tvDoj6uIPQj0HSWzB4tit2hBTPUa
-# nsZiawBwXvwc4qTktIPrsxBJVcedMV429q0aT/k5yB3poJcKGY8r9KLXWptq37Cd
-# J9hYFQ675myFGcgmm1PYtWHT6AZx4bOa2jvD3+D4ElpQb9CXRT2RT5U2O9tqGWxh
-# CaelGk8qh59cCbVQhgFaR9c+L1LMLxeGW4HyhIIpfT+UDB+kSgibohDY3s0+HJs3
-# vdtgP98ngc5kvufzcMWm+c9DJS+kxx6I7NRGhTdG/w76xbP+jokP8iAU3b5jCXa1
-# 3x2V4RLvzAtEoUtg2g6oV7hZbDQxC5JsQGwvOEOc8pAVUU4Lx0fMKrtt8yLUs9GR
-# AwsF0DZR/KQ57C5+ZFy+AeLi1Q4Fog5zQ/HP5mIu46tStGDa2txo8KRNy+OsLntU
-# Lta7NxQ0ti6tI9+5SkTdO6E+W+JuUtBhwOfdyS3qRsOlg3MwB49VU784omg=
+# hvcNAQEBBQAEggIAVUd3iRnBXnm1HV6lV0NHw+0/Z/PDcNUDtaskl6Cqwx6ipkF4
+# QxIG+1YtA/5RiQ6/P1yziWA5ti8fyMJ21dM48usKVsnWM9pvARbZ3mT61ZMvWpKL
+# GdFCVRkisXbey/I27ACPWOHh/9Cqa2qk6at/B3DmwfjVEMaT7bi4UQ0EI6nrd44w
+# J7uxuIi3J1ZsQg+0r/FG0w52s6/HTvAGDgtLBJotVxdOIYP7bgZFwCQfSBEShn8U
+# AQPoZTzzP+w7LK40qtoM/w+cI2YeGQ82nhJAmkKVezIHh9WF3e2Gqf/jxcMIX9Hn
+# 797n1JbKFiagn6blcQwAd77sVtShRtZWbZBNvP9vBvhXmRPANVRXCgmDDGBB7Wa3
+# fFOGS5g32GC/8cbytlhzLQScZ/iMezgb6nfbp6Ao+AtN97QDcMrRvHYN/5XgSAYF
+# fa7mTsb60tHfmZDLYNHa2wh4Yp07H/xkMw/AXx71qUQy5F5R2/ByfsboVUq2Jcst
+# MXhQ7MJqd5+ybwb4r6jP+z7UHaXKgjFb3NG5+yqAHQso0D+682DR2cqe6oX/TfiK
+# 1wUKnLZuxSrW7hHD3iN4+d94l2EDtX9RdGCFHCLMXENtEVUGN5RKI5lKww6xPFCm
+# 2uMDu1actEgBIAcRYh9tvP+C4c3HRcGPqCtPF96VEBXoYlxDH8miVDlVxZk=
 # SIG # End signature block
