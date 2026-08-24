@@ -17,7 +17,7 @@
 .OUTPUTS
 C:\ProgramData\Debloat\Debloat.log
 .NOTES
-  Version:        5.5.15
+  Version:        5.5.16
   Author:         Andrew Taylor
   Twitter:        @AndrewTaylor_2
   WWW:            andrewstaylor.com
@@ -187,6 +187,7 @@ C:\ProgramData\Debloat\Debloat.log
   Change 11/08/2026 - Fixed $builtin to BUILTIN
   Change 11/08/2026 - Added Lenovo Smart Meetings
   Change 13/08/2026 - Added check for Commercial Vantage before removing Lenovo vantage
+  Change 24/08/2026 - Dell Process fix and check function (thanks to https://github.com/bdudley-cw)
 N/A
 #>
 
@@ -2074,7 +2075,37 @@ function UninstallAppFull
     }
 }
 
-
+function Test-ProcessCritical
+{
+    # $true if the process is marked CRITICAL - terminating one bugchecks Windows (0xEF
+    # CRITICAL_PROCESS_DIED). If we can't determine it, return $true so the caller does NOT kill it.
+    [CmdletBinding()]
+    param([System.Diagnostics.Process]$Process)
+    if (-not ([System.Management.Automation.PSTypeName]'CwApi.ProcCheck').Type)
+    {
+        Add-Type -Language CSharp -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+namespace CwApi {
+    public static class ProcCheck {
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool IsProcessCritical(IntPtr hProcess, out bool Critical);
+    }
+}
+"@
+    }
+    try
+    {
+        $crit = $false
+        if ([CwApi.ProcCheck]::IsProcessCritical($Process.Handle, [ref]$crit))
+        { return [bool]$crit
+        }
+        return $true   # API call failed - be safe, treat as critical
+    } catch
+    {
+        return $true   # can't open/query the process - be safe, do NOT kill it
+    }
+}
 ############################################################################################################
 #                                        Remove Manufacturer Bloat                                         #
 #                                                                                                          #
@@ -2445,26 +2476,33 @@ if ($manufacturer -like "*Dell*")
         "Dell Display Manager 2.2"
         "DellInc.PartnerPromo"
         "Dell Trusted Device"
+        "Dell Optimizer"
     )
 
     ##Stop Running Processes
 
     $processnames = @(
-        "DellEnterpriseClientFrameworkSubAgent.exe",
-        "DellOptimizer.exe",
-        "DellOptimizer.Systray.exe",
-        "DellPair.exe",
-        "DellPairService.exe",
-        "DellSupportAssistRemedationService.exe",
-        "DellSupportAssistRemediationServiceInstaller.exe",
-        "DellUpdateSupportAssistPlugin.exe"
+        "DellEnterpriseClientFrameworkSubAgent",
+        "DellOptimizer",
+        "DellOptimizer.Systray",
+        "DellPair",
+        "DellPairService",
+        "DellSupportAssistRemediationServiceInstaller",
+        "DellUpdateSupportAssistPlugin"
     )
 
     foreach ($process in $processnames)
     {
-        write-output "Stopping Process $process"
-        Get-Process -Name $process | Stop-Process -Force
-        write-output "Process $process Stopped"
+        write-output "Checking for Process $process"
+        if (Test-ProcessCritical -Process (Get-Process -Name $process -ErrorAction SilentlyContinue))
+        {
+            write-output "Process $process is critical and cannot be stopped."
+        } else
+        {
+            write-output "Stopping Process $process"
+            Get-Process -Name $process | Stop-Process -Force
+            write-output "Process $process Stopped"
+        }
     }
 
 
@@ -2835,9 +2873,15 @@ if ($manufacturer -like "Lenovo")
 
     foreach ($process in $processnames)
     {
-        write-output "Stopping Process $process"
-        Get-Process -Name $process | Stop-Process -Force
-        write-output "Process $process Stopped"
+        if(Test-ProcessCritical -Process (Get-Process -Name $process -ErrorAction SilentlyContinue))
+        {
+            write-output "Process $process is critical and cannot be stopped."
+        } else
+        {
+            write-output "Process $process is critical and cannot be stopped."
+        } else
+        {
+        }
     }
 
     $UninstallPrograms = @(
@@ -4057,8 +4101,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIIgyAYJKoZIhvcNAQcCoIIguTCCILUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC6yVovRByMUT+h
-# 3inKt86qlmeOWStaO2iJ5wUzHATT26CCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDc45/PVgvnUIFz
+# KEUKKTPAamihS0UlWJm0SzGQaGau3aCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
 # /3YhZAcZstc+MA0GCSqGSIb3DQEBCwUAMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQK
 # ExhBc3NlY28gRGF0YSBTeXN0ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBDb2Rl
 # IFNpZ25pbmcgMjAyMSBDQTAeFw0yNjA3MDIxNTEwMjdaFw0yNzA3MDIxNTEwMjZa
@@ -4198,36 +4242,36 @@ Stop-Transcript
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gQ29kZSBTaWduaW5nIDIwMjEgQ0ECEBLxcD71h2D/diFkBxmy1z4wDQYJYIZI
 # AWUDBAIBBQCggYgwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYJKoZIhvcN
-# AQkFMQ8XDTI2MDgxMzEwMjY1OVowHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
-# ARUwLwYJKoZIhvcNAQkEMSIEIHPio345HcAZc8Bx/xtDA0grneYdMUxNwRzMt+WK
-# W1RIMA0GCSqGSIb3DQEBAQUABIIBgDk12DrdJpa02N2V8tCWonSDLBbtOv0CFxDy
-# L/n+Z5LmLuRZ5/P2L+uSJLpJaLDwUok4LqSvxK0hUI/iFKytEa1Yz0YSCMSJpdvm
-# HFI/V3dDSkT+lW4XhG7Zjv+a9pyQkO/ICRmETOXWFime2Mka4bn2DHUF3wy+Q3QY
-# XlGUtCAHHlrTNMhsUg3qVUat0gG/MlGEJV+l6mPS2h7+oBpAinHbNjifvPSlWQsH
-# RxM9kHPPZUwQZ5+v6mkV3COmuK5EhlbLeq2WKr2h2RWk5ZnMDKEpVwK3n4hc8sql
-# ic4ITMbyVv5/ca7y2RMmnSkm4E1JSi+anHw03SKuHPF3uowciW/Q2C/lMi4tH0dZ
-# ikbVaVo4MJiQeRfL+G1iZrqwNFsOu7UMLF89iVMA+fRlLLavDcN2MZ0IuJPegJJb
-# 2VdJWTP63dwZoACdNbL/nOcNWBF4SVAILBxwqiw/ZfPs8i80XDZGqHqRnoGT03D8
-# 18LEnTCC6rXbqNjbrgb1RuO74by6D6GCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
+# AQkFMQ8XDTI2MDgyNDE2NDAyM1owHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
+# ARUwLwYJKoZIhvcNAQkEMSIEIKgSH8AkZngDZnmMlCSun+LvVcY0sByqwQgoClzK
+# TOCiMA0GCSqGSIb3DQEBAQUABIIBgDwk7U86HVCkNWPZRDQ+j8N4AJMdqqdh6H6g
+# RskBn9zb20zuiRitOkRLLLjuIoqJEZFdOPDn0yol1+ogjcF23O7NIJaJzwDNWohZ
+# IaRPtU5z8EM2GsLYn0jC3iWRNuU6X1ZspzIMIQ5Kkk/EQh1SvROXGt+o1eikfOkm
+# fqIge0/Ch75Jc7WhJVAZkHHNK5u4Yhs/rxSLeattyyEYh35NcMKVtpYLGqd4u2BI
+# mg9QVKXxvRJSpqHMVrzS4rZAEGtVARMrbMc3ZfxNIgW/cmB72XTaGmDWy+R80FBg
+# t6MX8LI6zw50LvhH1XE20nGl0ZeNXfvyNbkE22tvwR6b+OIH1L2spT63m8ywOcTf
+# 2C/PBxuz/2icYTgfWrAbs0HbMvZDL4IpnBNZjXN2wrLiX0t65stdphoZ9Veh8IA8
+# hSFtCDgJbCR0Eh16fA8Nr1R9tmXpgP77rHMmV5SE9HTHfLAz3aAKB0rlstRKvxIC
+# rsfbC4nNWIxT6BkX4urpoDVoXYQBhKGCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
 # 6wIBATBqMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQKExhBc3NlY28gRGF0YSBTeXN0
 # ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBUaW1lc3RhbXBpbmcgMjAyMSBDQQIQ
 # KPB3wRw2vf5fdDJHcCcuAzANBglghkgBZQMEAgIFAKCCAVYwGgYJKoZIhvcNAQkD
-# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA4MTMxMDI3MDBaMDcG
+# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA4MjQxNjQwMjRaMDcG
 # CyqGSIb3DQEJEAIvMSgwJjAkMCIEIIW+kOEK0kONfMkotq9IsJqyCBd87PiwEmxY
-# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDBWDA5oJ5z9eGNcBpSsyZU67p4y/1iApCT/
-# P7XYvW9968H7WsXcfOusmWtVN9wDbZEwgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
+# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDAzcI/3XYHvVz40uLWJbtDEdPKgr5UU4XT/
+# FUGBGzUdwrPtVkDTPkGnKrP58VRFgFcwgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
 # MIGGBBRXFGhBDKha80JO+RZKUTYQ9NONmDBuMFqkWDBWMQswCQYDVQQGEwJQTDEh
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gVGltZXN0YW1waW5nIDIwMjEgQ0ECECjwd8EcNr3+X3QyR3AnLgMwDQYJKoZI
-# hvcNAQEBBQAEggIAne/HjWxzn4RL2gwYts6MhtNojXcpZZ2MzT05Du2mZeucRoXR
-# I+vNlPIAI0xU+OoTiYdHhOfNEmYdmJo6VCxFZ+vNY7lJHAAaKInqcnqQuk256+Xr
-# MZCYD5hbfT/7hXXnXsYK4aR2YeypRweW1m/hPKNWfW+MrrdSU1ApSVyIdEdIbKzm
-# DKUHsKMWuRY56Ag0WqCqrv2ylDQxfSRWq87bIEw4gmXIjh9bm8n+mv3F47GWEPaZ
-# m+VCgAoNOAFU0iEvyd1hxrwNZVAhKxVGL5ccKWADsCpAMR0GmD/W5boX0LkTm/TA
-# mjYANlqeYZgW178pRs/FjfBDWSil2VjnZTY8mTulKIjEiKn9EJCTO5/5O5vOMeAi
-# 2oK99+h580NBBqgMM3rtN8oF9FJAlNle2AMLIKGrx6JpLAwUS4/sElaPWI+d/9Wi
-# h9VTpxfSipIEkwNNw5CS/484mL6zYanM/G2X687QmxzFaCamK/yXqYLXYf/fbyN7
-# UhH93A2gKa58jUqz5Ghj+ZfmgzSTkMOgxt7flSBjOP+U39e+AwN6QAM/Z8eSYxNP
-# grQDdWIE6jD/6u+OdVpbDeyVY4CwPl8bQDio4DxKppgI3P0ax+Y0NS3jjzRQkd9b
-# cF0Esh64rRiGJFesjbUUQUVnk2hKsD77hIXMyq3Jyf1S11OPC9ocimoKvYg=
+# hvcNAQEBBQAEggIABrwKFVv9d7//2a8rrJVMjNQFV+pEaYtbul0t66Dc9/b1loqo
+# JW14ZCFBUC4eV9+UL3z05yZDWffvjHdvTh6qxd5ElPy4N8oaxTJzy0gYVluz95bY
+# dm2UOZZ11fYrgThkuJiPPuYB3G0lDCq8j4Pn35R9AJNKW7h2KdSWpv6RGWnTcGfu
+# mlMfZ9R1HZtYqzeWdGpmfMTgYVarWJ182AjkuKERNO5OtFO+mDWUaCjtLlBMoXiJ
+# Boxk3RipHG+Rxx59+tyNK0mz0vHKaaq9bJ5Rb0MMy9E1PQ/lkp4gQ8LM7pp+bqvO
+# m4P3h0wpUPkNoKLDwx/mJ2Zy47AdGkI9Ti96fwAk2KMXx6V9DgMvO2RsTqSxGw5W
+# EArxs0+0r9ZfdG2Dw4rEKoETvbBixvfIrpONoyYVuHngZvKhR8BrcLft+fM/a+S1
+# qAcdy2eONIqwxyT4tEGCVB9FpU7p3uIB3p7DsW5GJP8bwycl0GX+6Q0ffsGwCtIj
+# TLQkiG68xKJVyUpQNcDt+f+0cRj3VhE5iAu+E6ABIg8trZn4QzrmHkBa8Nome1ZQ
+# /zP5azOuSrjvRXnek2lNHTt/B6nPxB6Zdh6+rHZ9mscnvkpl3kL2mu1dAdnLywtr
+# 72CSYpCP7hY2FRMSunHXOfG33HiESeuNpV4Hty8bYnAISJk5Fy8lq/xZpKo=
 # SIG # End signature block
