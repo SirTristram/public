@@ -17,7 +17,7 @@
 .OUTPUTS
 C:\ProgramData\Debloat\Debloat.log
 .NOTES
-  Version:        5.5.16
+  Version:        5.6.0
   Author:         Andrew Taylor
   Twitter:        @AndrewTaylor_2
   WWW:            andrewstaylor.com
@@ -188,6 +188,7 @@ C:\ProgramData\Debloat\Debloat.log
   Change 11/08/2026 - Added Lenovo Smart Meetings
   Change 13/08/2026 - Added check for Commercial Vantage before removing Lenovo vantage
   Change 24/08/2026 - Dell Process fix and check function (thanks to https://github.com/bdudley-cw)
+  Change 25/08/2026 - Added parameter to skip Start Menu changes
 N/A
 #>
 
@@ -198,7 +199,8 @@ N/A
 param (
     [string[]]$customwhitelist,
     [string[]]$TasksToRemove,  # Add this parameter for scheduled tasks to remove
-    [string[]]$custombloatlist
+    [string[]]$custombloatlist,
+    [string]$AllowStartMenuReset = "true"
 
 )
 
@@ -215,7 +217,7 @@ If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     write-output "                                               1"
     Start-Sleep 1
     #Start-Process powershell.exe -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -File `"{0}`" -WhitelistApps {1}" -f $PSCommandPath, ($WhitelistApps -join ',')) -Verb RunAs
-    Start-Process powershell.exe -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -File `"{0}`" -customwhitelist {1} -TasksToRemove {2}" -f $PSCommandPath, ($customwhitelist -join ','), ($TasksToRemove -join ',')) -Verb RunAs
+    Start-Process powershell.exe -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -File `"{0}`" -customwhitelist {1} -TasksToRemove {2} -custombloatlist {3} -AllowStartMenuReset {4}" -f $PSCommandPath, ($customwhitelist -join ','), ($TasksToRemove -join ','), ($custombloatlist -join ','), $AllowStartMenuReset) -Verb RunAs
     Exit
 }
 
@@ -1630,52 +1632,54 @@ write-output "Default user hive updated"
 #                                             Clear Start Menu                                             #
 #                                                                                                          #
 ############################################################################################################
-write-output "Clearing Start Menu"
-#Delete layout file if it already exists
-
-##Check windows version
-$version = Get-CimInstance Win32_OperatingSystem | Select-Object -ExpandProperty Caption
-if ($version -like "*Windows 10*")
+if ($AllowStartMenuReset -eq 'true')
 {
-    write-output "Windows 10 Detected"
-    write-output "Removing Current Layout"
-    If (Test-Path C:\Windows\StartLayout.xml)
+    write-output "Clearing Start Menu"
+    #Delete layout file if it already exists
+
+    ##Check windows version
+    $version = Get-CimInstance Win32_OperatingSystem | Select-Object -ExpandProperty Caption
+    if ($version -like "*Windows 10*")
     {
+        write-output "Windows 10 Detected"
+        write-output "Removing Current Layout"
+        If (Test-Path C:\Windows\StartLayout.xml)
+        {
 
-        Remove-Item C:\Windows\StartLayout.xml
+            Remove-Item C:\Windows\StartLayout.xml
 
+        }
+        write-output "Creating Default Layout"
+        #Creates the blank layout file
+
+        Write-Output "<LayoutModificationTemplate xmlns:defaultlayout=""http://schemas.microsoft.com/Start/2014/FullDefaultLayout"" xmlns:start=""http://schemas.microsoft.com/Start/2014/StartLayout"" Version=""1"" xmlns=""http://schemas.microsoft.com/Start/2014/LayoutModification"">" >> C:\Windows\StartLayout.xml
+
+        Write-Output " <LayoutOptions StartTileGroupCellWidth=""6"" />" >> C:\Windows\StartLayout.xml
+
+        Write-Output " <DefaultLayoutOverride>" >> C:\Windows\StartLayout.xml
+
+        Write-Output " <StartLayoutCollection>" >> C:\Windows\StartLayout.xml
+
+        Write-Output " <defaultlayout:StartLayout GroupCellWidth=""6"" />" >> C:\Windows\StartLayout.xml
+
+        Write-Output " </StartLayoutCollection>" >> C:\Windows\StartLayout.xml
+
+        Write-Output " </DefaultLayoutOverride>" >> C:\Windows\StartLayout.xml
+
+        Write-Output "</LayoutModificationTemplate>" >> C:\Windows\StartLayout.xml
     }
-    write-output "Creating Default Layout"
-    #Creates the blank layout file
-
-    Write-Output "<LayoutModificationTemplate xmlns:defaultlayout=""http://schemas.microsoft.com/Start/2014/FullDefaultLayout"" xmlns:start=""http://schemas.microsoft.com/Start/2014/StartLayout"" Version=""1"" xmlns=""http://schemas.microsoft.com/Start/2014/LayoutModification"">" >> C:\Windows\StartLayout.xml
-
-    Write-Output " <LayoutOptions StartTileGroupCellWidth=""6"" />" >> C:\Windows\StartLayout.xml
-
-    Write-Output " <DefaultLayoutOverride>" >> C:\Windows\StartLayout.xml
-
-    Write-Output " <StartLayoutCollection>" >> C:\Windows\StartLayout.xml
-
-    Write-Output " <defaultlayout:StartLayout GroupCellWidth=""6"" />" >> C:\Windows\StartLayout.xml
-
-    Write-Output " </StartLayoutCollection>" >> C:\Windows\StartLayout.xml
-
-    Write-Output " </DefaultLayoutOverride>" >> C:\Windows\StartLayout.xml
-
-    Write-Output "</LayoutModificationTemplate>" >> C:\Windows\StartLayout.xml
-}
-if ($version -like "*Windows 11*")
-{
-    write-output "Windows 11 Detected"
-    write-output "Removing Current Layout"
-    If (Test-Path "C:\Users\Default\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml")
+    if ($version -like "*Windows 11*")
     {
+        write-output "Windows 11 Detected"
+        write-output "Removing Current Layout"
+        If (Test-Path "C:\Users\Default\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml")
+        {
 
-        Remove-Item "C:\Users\Default\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml"
+            Remove-Item "C:\Users\Default\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml"
 
-    }
+        }
 
-    $blankjson = @'
+        $blankjson = @'
 {
     "pinnedList": [
 { "desktopAppId": "MSEdge" },
@@ -1685,28 +1689,32 @@ if ($version -like "*Windows 11*")
 }
 '@
 
-    $blankjson | Out-File "C:\Users\Default\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml" -Encoding utf8 -Force
-    $intunepath = "HKLM:\SOFTWARE\Microsoft\IntuneManagementExtension\Win32Apps"
-    $intunecomplete = @(Get-ChildItem $intunepath).count
-    $userpath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"
-    $userprofiles = Get-ChildItem $userpath | ForEach-Object { Get-ItemProperty $_.PSPath }
+        $blankjson | Out-File "C:\Users\Default\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml" -Encoding utf8 -Force
+        $intunepath = "HKLM:\SOFTWARE\Microsoft\IntuneManagementExtension\Win32Apps"
+        $intunecomplete = @(Get-ChildItem $intunepath).count
+        $userpath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"
+        $userprofiles = Get-ChildItem $userpath | ForEach-Object { Get-ItemProperty $_.PSPath }
 
-    $nonAdminLoggedOn = $false
-    foreach ($user in $userprofiles)
-    {
-        if ($user.PSChildName -ne '.DEFAULT' -and $user.PSChildName -ne 'S-1-5-18' -and $user.PSChildName -ne 'S-1-5-19' -and $user.PSChildName -ne 'S-1-5-20' -and $user.PSChildName -notmatch 'S-1-5-21-\d+-\d+-\d+-500' -and $user.ProfileImagePath -notlike '*\defaultuser0')
+        $nonAdminLoggedOn = $false
+        foreach ($user in $userprofiles)
         {
-            $nonAdminLoggedOn = $true
-            break
+            if ($user.PSChildName -ne '.DEFAULT' -and $user.PSChildName -ne 'S-1-5-18' -and $user.PSChildName -ne 'S-1-5-19' -and $user.PSChildName -ne 'S-1-5-20' -and $user.PSChildName -notmatch 'S-1-5-21-\d+-\d+-\d+-500' -and $user.ProfileImagePath -notlike '*\defaultuser0')
+            {
+                $nonAdminLoggedOn = $true
+                break
+            }
+        }
+
+        if ($nonAdminLoggedOn -eq $false)
+        {
+            MkDir -Path "C:\Users\Default\AppData\Local\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState" -Force -ErrorAction SilentlyContinue | Out-Null
+            $starturl = "https://github.com/andrew-s-taylor/public/raw/main/De-Bloat/start2.bin"
+            invoke-webrequest -uri $starturl -outfile "C:\Users\Default\AppData\Local\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState\Start2.bin"
         }
     }
-
-    if ($nonAdminLoggedOn -eq $false)
-    {
-        MkDir -Path "C:\Users\Default\AppData\Local\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState" -Force -ErrorAction SilentlyContinue | Out-Null
-        $starturl = "https://github.com/andrew-s-taylor/public/raw/main/De-Bloat/start2.bin"
-        invoke-webrequest -uri $starturl -outfile "C:\Users\Default\AppData\Local\Packages\Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\LocalState\Start2.bin"
-    }
+} else
+{
+    write-output "Skipping Start Menu reset (AllowStartMenuReset not set to true)"
 }
 
 
@@ -2477,6 +2485,8 @@ if ($manufacturer -like "*Dell*")
         "DellInc.PartnerPromo"
         "Dell Trusted Device"
         "Dell Optimizer"
+        "Dell AppCore (Optimizer Console)"
+        "Dell AppCore"
     )
 
     ##Stop Running Processes
@@ -4101,8 +4111,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIIgyAYJKoZIhvcNAQcCoIIguTCCILUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDc45/PVgvnUIFz
-# KEUKKTPAamihS0UlWJm0SzGQaGau3aCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBIsnBz7Budq8P9
+# Eje6xCFJq30NdTAfjPtl/1y2VXFUFaCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
 # /3YhZAcZstc+MA0GCSqGSIb3DQEBCwUAMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQK
 # ExhBc3NlY28gRGF0YSBTeXN0ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBDb2Rl
 # IFNpZ25pbmcgMjAyMSBDQTAeFw0yNjA3MDIxNTEwMjdaFw0yNzA3MDIxNTEwMjZa
@@ -4242,36 +4252,36 @@ Stop-Transcript
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gQ29kZSBTaWduaW5nIDIwMjEgQ0ECEBLxcD71h2D/diFkBxmy1z4wDQYJYIZI
 # AWUDBAIBBQCggYgwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYJKoZIhvcN
-# AQkFMQ8XDTI2MDgyNDE2NDAyM1owHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
-# ARUwLwYJKoZIhvcNAQkEMSIEIKgSH8AkZngDZnmMlCSun+LvVcY0sByqwQgoClzK
-# TOCiMA0GCSqGSIb3DQEBAQUABIIBgDwk7U86HVCkNWPZRDQ+j8N4AJMdqqdh6H6g
-# RskBn9zb20zuiRitOkRLLLjuIoqJEZFdOPDn0yol1+ogjcF23O7NIJaJzwDNWohZ
-# IaRPtU5z8EM2GsLYn0jC3iWRNuU6X1ZspzIMIQ5Kkk/EQh1SvROXGt+o1eikfOkm
-# fqIge0/Ch75Jc7WhJVAZkHHNK5u4Yhs/rxSLeattyyEYh35NcMKVtpYLGqd4u2BI
-# mg9QVKXxvRJSpqHMVrzS4rZAEGtVARMrbMc3ZfxNIgW/cmB72XTaGmDWy+R80FBg
-# t6MX8LI6zw50LvhH1XE20nGl0ZeNXfvyNbkE22tvwR6b+OIH1L2spT63m8ywOcTf
-# 2C/PBxuz/2icYTgfWrAbs0HbMvZDL4IpnBNZjXN2wrLiX0t65stdphoZ9Veh8IA8
-# hSFtCDgJbCR0Eh16fA8Nr1R9tmXpgP77rHMmV5SE9HTHfLAz3aAKB0rlstRKvxIC
-# rsfbC4nNWIxT6BkX4urpoDVoXYQBhKGCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
+# AQkFMQ8XDTI2MDgyNTE2MTYxM1owHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
+# ARUwLwYJKoZIhvcNAQkEMSIEILeUfe1QIKantmFPevESOEPDCzQSUSBsfryBaR4k
+# 698wMA0GCSqGSIb3DQEBAQUABIIBgIIw+DNKw4RZ3fGUmFoJ9/Uxop7Q28LmuOtG
+# s18VE70C/8LzNGUMtG9hkOkznsFtt5yFiNsTiW2hCT82L7Ds6YyEaVMvGC8pUni6
+# nNlAzvg9y2UEFxHdD5nPeo5bVxGUHuvD0lQa91L/iQmKZYd8Ha5FWxoEFlZAW3Dn
+# lynwswpVa1eo58C7z/EPGdURHMuMlEKR3FvJgcqEhfJ8+qEnLSxIaQ0HijrzIQpk
+# j/dSb5zbrxq9sAQEDxO13UAYwqJlWJCapR2inczb6o6uJNtjclLxQ1kesoDO//1G
+# j0UvkDZacztsyl/lZEWhdVhDGIze/q4eNCp9ZCDLeGy9RA72dcq5K+bsBDuRFRdU
+# m3/i4QuYOHYXFs2B0EoLtIOe5KjH+qvcVKHRb/TYftQGmnGypTkHtSO9qbROz4Go
+# 3rvYO07mIUEKKCoAtnxspZxHIqZWVT073TpmDJtazlqed2itsVFU8Nbh8Vn28YOM
+# UVgzaNxFEUx/7O+1PDf2ICfPKf5l2KGCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
 # 6wIBATBqMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQKExhBc3NlY28gRGF0YSBTeXN0
 # ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBUaW1lc3RhbXBpbmcgMjAyMSBDQQIQ
 # KPB3wRw2vf5fdDJHcCcuAzANBglghkgBZQMEAgIFAKCCAVYwGgYJKoZIhvcNAQkD
-# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA4MjQxNjQwMjRaMDcG
+# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA4MjUxNjE2MTNaMDcG
 # CyqGSIb3DQEJEAIvMSgwJjAkMCIEIIW+kOEK0kONfMkotq9IsJqyCBd87PiwEmxY
-# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDAzcI/3XYHvVz40uLWJbtDEdPKgr5UU4XT/
-# FUGBGzUdwrPtVkDTPkGnKrP58VRFgFcwgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
+# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDBvOO8+T9MH6wIN5ZnSFUoGi68EAAw7mtU5
+# I9vTzcMjG/eSRK+/IF4rSzZ6OCxcKfYwgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
 # MIGGBBRXFGhBDKha80JO+RZKUTYQ9NONmDBuMFqkWDBWMQswCQYDVQQGEwJQTDEh
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gVGltZXN0YW1waW5nIDIwMjEgQ0ECECjwd8EcNr3+X3QyR3AnLgMwDQYJKoZI
-# hvcNAQEBBQAEggIABrwKFVv9d7//2a8rrJVMjNQFV+pEaYtbul0t66Dc9/b1loqo
-# JW14ZCFBUC4eV9+UL3z05yZDWffvjHdvTh6qxd5ElPy4N8oaxTJzy0gYVluz95bY
-# dm2UOZZ11fYrgThkuJiPPuYB3G0lDCq8j4Pn35R9AJNKW7h2KdSWpv6RGWnTcGfu
-# mlMfZ9R1HZtYqzeWdGpmfMTgYVarWJ182AjkuKERNO5OtFO+mDWUaCjtLlBMoXiJ
-# Boxk3RipHG+Rxx59+tyNK0mz0vHKaaq9bJ5Rb0MMy9E1PQ/lkp4gQ8LM7pp+bqvO
-# m4P3h0wpUPkNoKLDwx/mJ2Zy47AdGkI9Ti96fwAk2KMXx6V9DgMvO2RsTqSxGw5W
-# EArxs0+0r9ZfdG2Dw4rEKoETvbBixvfIrpONoyYVuHngZvKhR8BrcLft+fM/a+S1
-# qAcdy2eONIqwxyT4tEGCVB9FpU7p3uIB3p7DsW5GJP8bwycl0GX+6Q0ffsGwCtIj
-# TLQkiG68xKJVyUpQNcDt+f+0cRj3VhE5iAu+E6ABIg8trZn4QzrmHkBa8Nome1ZQ
-# /zP5azOuSrjvRXnek2lNHTt/B6nPxB6Zdh6+rHZ9mscnvkpl3kL2mu1dAdnLywtr
-# 72CSYpCP7hY2FRMSunHXOfG33HiESeuNpV4Hty8bYnAISJk5Fy8lq/xZpKo=
+# hvcNAQEBBQAEggIAp8wVY9v9tSRlz4iCzfu9ZkREBfjtoWSQacc1eOvCbKhkSqyU
+# YA18vOZjZVlvnIHKivRMFq/RRcYMQpARIWr7EAiHSnbtRmLnLMgr/OtEtHMdE1tJ
+# y7QsmmZ41zHlXt8Pxd+29Xh30xWPPTLGhJkaVANZ0L730WiAMIo/Mm0DgQPVHKW6
+# T/cHUQh1pUe0n1jhX5GC+or539xgEb48d7IeOBABCgExD7KqF8fEOy4wgAO6vaHp
+# ywIIWP9qsDFY1liz8pFT6bSgesiABaHfGKWvCapipsccMkm7eapBsQrrcEQ3uS95
+# g3UA8nxWqyGx606JK3iMtJBvqHMvs9bnOwYrOqUCPxfDoHmEd103AvhxxyiOGS+i
+# LaUuGiACZqH8MCBvm8XJmwubSEis3GeUuMPT+TUTErP6IxjJBm/gzbmK2mHtfpcH
+# 7oNDHb2mVPDOxSxZ1+yE4XXB7JPeKE610DSHe6+KMcxPhpg3hWNDCPwYnCxvku/M
+# 8kaA2CZ6lLoJY/CZxyOKPq4TZlrAmnZCZ4Xf4YF0rFidRehu5V3p85EGa1jVmsrs
+# nT1HoFZQNM9d3++xjYA4CqAAgz9d6dK15MLOK/5N4WRuTA74nQd9auWtBKfKzEbo
+# Sb/PtanjZL1EZjQdz0eK+RHVM/vn4AuSi9wWmKrVx+kd8TNhKYQKA8Iz5j8=
 # SIG # End signature block
