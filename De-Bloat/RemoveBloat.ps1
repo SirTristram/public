@@ -17,7 +17,7 @@
 .OUTPUTS
 C:\ProgramData\Debloat\Debloat.log
 .NOTES
-  Version:        5.6.0
+  Version:        5.6.1
   Author:         Andrew Taylor
   Twitter:        @AndrewTaylor_2
   WWW:            andrewstaylor.com
@@ -189,6 +189,8 @@ C:\ProgramData\Debloat\Debloat.log
   Change 13/08/2026 - Added check for Commercial Vantage before removing Lenovo vantage
   Change 24/08/2026 - Dell Process fix and check function (thanks to https://github.com/bdudley-cw)
   Change 25/08/2026 - Added parameter to skip Start Menu changes
+  Change 30/08/2026 - Added fix for Dell Optimizer silent install
+  Change 30/08/2026 - Added support for arrays on test-criticalprocesses function
 N/A
 #>
 
@@ -2085,10 +2087,11 @@ function UninstallAppFull
 
 function Test-ProcessCritical
 {
-    # $true if the process is marked CRITICAL - terminating one bugchecks Windows (0xEF
-    # CRITICAL_PROCESS_DIED). If we can't determine it, return $true so the caller does NOT kill it.
+    # $true if any of the given processes is marked CRITICAL - terminating one bugchecks Windows
+    # (0xEF CRITICAL_PROCESS_DIED). If we can't determine it, return $true so the caller does NOT
+    # kill it. Accepts zero, one, or many processes (e.g. several instances sharing the same name).
     [CmdletBinding()]
-    param([System.Diagnostics.Process]$Process)
+    param([System.Diagnostics.Process[]]$Process)
     if (-not ([System.Management.Automation.PSTypeName]'CwApi.ProcCheck').Type)
     {
         Add-Type -Language CSharp -TypeDefinition @"
@@ -2102,17 +2105,30 @@ namespace CwApi {
 }
 "@
     }
-    try
+    if (-not $Process)
     {
-        $crit = $false
-        if ([CwApi.ProcCheck]::IsProcessCritical($Process.Handle, [ref]$crit))
-        { return [bool]$crit
-        }
-        return $true   # API call failed - be safe, treat as critical
-    } catch
-    {
-        return $true   # can't open/query the process - be safe, do NOT kill it
+        return $false   # nothing matched, so there is nothing critical to protect
     }
+    foreach ($proc in $Process)
+    {
+        try
+        {
+            $crit = $false
+            if ([CwApi.ProcCheck]::IsProcessCritical($proc.Handle, [ref]$crit))
+            {
+                if ($crit)
+                { return $true 
+                }
+            } else
+            {
+                return $true   # API call failed - be safe, treat as critical
+            }
+        } catch
+        {
+            return $true   # can't open/query the process - be safe, do NOT kill it
+        }
+    }
+    return $false
 }
 ############################################################################################################
 #                                        Remove Manufacturer Bloat                                         #
@@ -2484,7 +2500,8 @@ if ($manufacturer -like "*Dell*")
         "Dell Display Manager 2.2"
         "DellInc.PartnerPromo"
         "Dell Trusted Device"
-        "Dell Optimizer"
+        ##This is handled further down
+        ##"Dell Optimizer"
         "Dell AppCore (Optimizer Console)"
         "Dell AppCore"
     )
@@ -2883,14 +2900,16 @@ if ($manufacturer -like "Lenovo")
 
     foreach ($process in $processnames)
     {
-        if(Test-ProcessCritical -Process (Get-Process -Name $process -ErrorAction SilentlyContinue))
+        write-output "Checking for Process $process"
+        wr ite-output "Checking for Process $process"
+        if (Test-ProcessCritical -Process (Get-Process -Name $process -ErrorAction SilentlyContinue))
         {
             write-output "Process $process is critical and cannot be stopped."
         } else
         {
-            write-output "Process $process is critical and cannot be stopped."
-        } else
-        {
+            write-output "Stopping Process $process"
+            Get-Process -Name $process | Stop-Process -Force
+            write-output "Process $process Stopped"
         }
     }
 
@@ -4111,8 +4130,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIIgyAYJKoZIhvcNAQcCoIIguTCCILUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBIsnBz7Budq8P9
-# Eje6xCFJq30NdTAfjPtl/1y2VXFUFaCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBFDwfsANsXTx+/
+# PBfwx4Z4TAQYd4CIzve73FYPSGkHY6CCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
 # /3YhZAcZstc+MA0GCSqGSIb3DQEBCwUAMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQK
 # ExhBc3NlY28gRGF0YSBTeXN0ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBDb2Rl
 # IFNpZ25pbmcgMjAyMSBDQTAeFw0yNjA3MDIxNTEwMjdaFw0yNzA3MDIxNTEwMjZa
@@ -4252,36 +4271,36 @@ Stop-Transcript
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gQ29kZSBTaWduaW5nIDIwMjEgQ0ECEBLxcD71h2D/diFkBxmy1z4wDQYJYIZI
 # AWUDBAIBBQCggYgwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYJKoZIhvcN
-# AQkFMQ8XDTI2MDgyNTE2MTYxM1owHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
-# ARUwLwYJKoZIhvcNAQkEMSIEILeUfe1QIKantmFPevESOEPDCzQSUSBsfryBaR4k
-# 698wMA0GCSqGSIb3DQEBAQUABIIBgIIw+DNKw4RZ3fGUmFoJ9/Uxop7Q28LmuOtG
-# s18VE70C/8LzNGUMtG9hkOkznsFtt5yFiNsTiW2hCT82L7Ds6YyEaVMvGC8pUni6
-# nNlAzvg9y2UEFxHdD5nPeo5bVxGUHuvD0lQa91L/iQmKZYd8Ha5FWxoEFlZAW3Dn
-# lynwswpVa1eo58C7z/EPGdURHMuMlEKR3FvJgcqEhfJ8+qEnLSxIaQ0HijrzIQpk
-# j/dSb5zbrxq9sAQEDxO13UAYwqJlWJCapR2inczb6o6uJNtjclLxQ1kesoDO//1G
-# j0UvkDZacztsyl/lZEWhdVhDGIze/q4eNCp9ZCDLeGy9RA72dcq5K+bsBDuRFRdU
-# m3/i4QuYOHYXFs2B0EoLtIOe5KjH+qvcVKHRb/TYftQGmnGypTkHtSO9qbROz4Go
-# 3rvYO07mIUEKKCoAtnxspZxHIqZWVT073TpmDJtazlqed2itsVFU8Nbh8Vn28YOM
-# UVgzaNxFEUx/7O+1PDf2ICfPKf5l2KGCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
+# AQkFMQ8XDTI2MDgzMDE4MTExMlowHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
+# ARUwLwYJKoZIhvcNAQkEMSIEIH60UYCxanQbrBVYW+YuJ5gaKwUvrI8B/kRG5OTb
+# rFVOMA0GCSqGSIb3DQEBAQUABIIBgJUeE/+6anD5PuBatvcX6mL1gWw3kXUINYcr
+# f0qbav232I3n70V0ogQKiEY65A8Tn2T4OTOfGZAI6PTL8/e3/If668sfOqYf5PvA
+# /Z4Mr5IJGPJ06QvG3rgFX9EaO0Ei4eeRibp8T9r7sXute3dGAKd9Iit/tEoqkah4
+# cPyHUe7IcgQs1Lom4ZpD5dbISdwqmtliD9QFDZI3gDnEkGn832YeNOyHNAIncaWo
+# wSprkB2/wWb7m6qcE1968KZMGZtH4qWqAfMVfY9OtMGZxsE5SSklOl72GXqzKzDj
+# CPSL9FbuRadTHTwduf0gTHzg1RcaouDEYnnivbq8GnwDBq1wxR67cnQId4M3wsGW
+# 6wvCZ74FJzAqAXDPJB8ooXMItT66ASiJeIxvQo+gTkOy2wCL4egV/WiKc+FKyOac
+# yKfEbPCOAOrqNGZSTeYfccVEpjPDZCJG8JA7RZQf5N4zjmkaJgRBi6zOaA3G4GSh
+# sM9JScyI+dz/DMLVBkeRLJIELOoYqqGCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
 # 6wIBATBqMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQKExhBc3NlY28gRGF0YSBTeXN0
 # ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBUaW1lc3RhbXBpbmcgMjAyMSBDQQIQ
 # KPB3wRw2vf5fdDJHcCcuAzANBglghkgBZQMEAgIFAKCCAVYwGgYJKoZIhvcNAQkD
-# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA4MjUxNjE2MTNaMDcG
+# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA4MzAxODExMTNaMDcG
 # CyqGSIb3DQEJEAIvMSgwJjAkMCIEIIW+kOEK0kONfMkotq9IsJqyCBd87PiwEmxY
-# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDBvOO8+T9MH6wIN5ZnSFUoGi68EAAw7mtU5
-# I9vTzcMjG/eSRK+/IF4rSzZ6OCxcKfYwgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
+# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDDhgtJ5i0NyR3YmZoJ5ZyvAqg+XMNJhS522
+# NVQWSH9gVblCQFpJABW6Fw4HwWywAg0wgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
 # MIGGBBRXFGhBDKha80JO+RZKUTYQ9NONmDBuMFqkWDBWMQswCQYDVQQGEwJQTDEh
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gVGltZXN0YW1waW5nIDIwMjEgQ0ECECjwd8EcNr3+X3QyR3AnLgMwDQYJKoZI
-# hvcNAQEBBQAEggIAp8wVY9v9tSRlz4iCzfu9ZkREBfjtoWSQacc1eOvCbKhkSqyU
-# YA18vOZjZVlvnIHKivRMFq/RRcYMQpARIWr7EAiHSnbtRmLnLMgr/OtEtHMdE1tJ
-# y7QsmmZ41zHlXt8Pxd+29Xh30xWPPTLGhJkaVANZ0L730WiAMIo/Mm0DgQPVHKW6
-# T/cHUQh1pUe0n1jhX5GC+or539xgEb48d7IeOBABCgExD7KqF8fEOy4wgAO6vaHp
-# ywIIWP9qsDFY1liz8pFT6bSgesiABaHfGKWvCapipsccMkm7eapBsQrrcEQ3uS95
-# g3UA8nxWqyGx606JK3iMtJBvqHMvs9bnOwYrOqUCPxfDoHmEd103AvhxxyiOGS+i
-# LaUuGiACZqH8MCBvm8XJmwubSEis3GeUuMPT+TUTErP6IxjJBm/gzbmK2mHtfpcH
-# 7oNDHb2mVPDOxSxZ1+yE4XXB7JPeKE610DSHe6+KMcxPhpg3hWNDCPwYnCxvku/M
-# 8kaA2CZ6lLoJY/CZxyOKPq4TZlrAmnZCZ4Xf4YF0rFidRehu5V3p85EGa1jVmsrs
-# nT1HoFZQNM9d3++xjYA4CqAAgz9d6dK15MLOK/5N4WRuTA74nQd9auWtBKfKzEbo
-# Sb/PtanjZL1EZjQdz0eK+RHVM/vn4AuSi9wWmKrVx+kd8TNhKYQKA8Iz5j8=
+# hvcNAQEBBQAEggIADrZPaHwDAfycvurEwcHitKp+Z3aOkFuUpPdTzjKgRS6tJrSh
+# y+qQ7xtxySu6y0RkSN/vZjTKvAYQB08XNMRC3tf+dXTzr5CG6xDvz5xJB37k93hC
+# 85TWZXfsawnF6t/3ULd72rFpAro67Jkty3M5s3W2qPtk4P4EVD8hqRyyyPfSBVTX
+# fluo56j1qzAfztxf6AJIthWcSfZsqbv6QNQKT0wSW+zXv83Zgdz2vRHNAUGPkau4
+# As4en+CZGjBXJbqP9AmvKURK9nmn9VusHJw1nnmUcvLG3uv89mM7Ipxp40gdj/gf
+# DVT2D5ekigG46T/5MN6DmWbfFhE0vaErraXsCI3XtwzSwPN98g47ldBkPh2clr5t
+# 6eYpyEkfO97Gy+h67u5HIW1KttZZfsNQYxolcdB4+7vpbBzoA6APyetkn9QQFsjh
+# sekmpxJx70T9X9bH39iNfrCqmSoEIyxZyUUAGOtM6RcWpkxw2gQf/1xExqAOHNne
+# CQiYQUS8CZ+HPAPsLcsbX1ToxPrdaalvI0CY67xChZ342I6eCYFKSBPRrfKWjuTf
+# 2uXbHeSFHLeS6G9CvIkyaf7Ru8+aCyD2H17Ld4B4Xb+qOSNbM/vntJr9XR2WB8i/
+# 5MtaNickoGna4dD4pve/pCoA+hB1mM+CKRCFYyzjlka5xLdX9swJ+tvk2KA=
 # SIG # End signature block
