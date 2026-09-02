@@ -17,7 +17,7 @@
 .OUTPUTS
 C:\ProgramData\Debloat\Debloat.log
 .NOTES
-  Version:        5.6.2
+  Version:        5.6.3
   Author:         Andrew Taylor
   Twitter:        @AndrewTaylor_2
   WWW:            andrewstaylor.com
@@ -192,6 +192,7 @@ C:\ProgramData\Debloat\Debloat.log
   Change 30/08/2026 - Added fix for Dell Optimizer silent install
   Change 30/08/2026 - Added support for arrays on test-criticalprocesses function
   Change 02/09/2026 - Dell Optimizer fix (again)
+  Change 02/09/2026 - Uninstall change to wait for previous app to finish
 N/A
 #>
 
@@ -2037,7 +2038,7 @@ function UninstallAppFull
             # To refactorize back to a single uninstall call, remove here to the next comment. From here...
             try
             {
-                Start-Process $uninstaller -ArgumentList $uninstallArgs
+                Start-Process $uninstaller -ArgumentList $uninstallArgs -wait -PassThru
                 Write-Output "Successfully called MSI Uninstaller for: $displayName"
             } catch
             {
@@ -2058,7 +2059,7 @@ function UninstallAppFull
             # To refactorize back to a single uninstall call, remove here to the next comment. From here...
             try
             {
-                Start-Process $uninstaller -ArgumentList $uninstallArgs
+                Start-Process $uninstaller -ArgumentList $uninstallArgs -wait -PassThru
                 Write-Output "Successfully called EXE Uninstaller for: $displayName"
             } catch
             {
@@ -2505,6 +2506,7 @@ if ($manufacturer -like "*Dell*")
         ##"Dell Optimizer"
         "Dell AppCore (Optimizer Console)"
         "Dell AppCore"
+        "Dell.Digital.Delivery-64Bit"
     )
 
     ##Stop Running Processes
@@ -4131,8 +4133,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIIgyAYJKoZIhvcNAQcCoIIguTCCILUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAwsFOsqytV7Usx
-# QgLjJJSalXQCmae0dRNV3hssmGr0mqCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCChU8fQbhMGqAK4
+# KFurRlXChqvVspY9KX/OSha6hEOmIaCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
 # /3YhZAcZstc+MA0GCSqGSIb3DQEBCwUAMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQK
 # ExhBc3NlY28gRGF0YSBTeXN0ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBDb2Rl
 # IFNpZ25pbmcgMjAyMSBDQTAeFw0yNjA3MDIxNTEwMjdaFw0yNzA3MDIxNTEwMjZa
@@ -4272,36 +4274,36 @@ Stop-Transcript
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gQ29kZSBTaWduaW5nIDIwMjEgQ0ECEBLxcD71h2D/diFkBxmy1z4wDQYJYIZI
 # AWUDBAIBBQCggYgwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYJKoZIhvcN
-# AQkFMQ8XDTI2MDkwMjEwNTUwNFowHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
-# ARUwLwYJKoZIhvcNAQkEMSIEILTMn1X1MiXFmdpFa4AzqCKgVb0czblMgevmuHhX
-# 95LmMA0GCSqGSIb3DQEBAQUABIIBgGlEXUOJ72IjmL+PbqWdvjcdsUXWLpaHBhSI
-# 9gwD7152YXae7qMtntmpD6leo37UvxKc8bQXwy7Dx/SYhyNOqh+BRrX0VaYF1I8D
-# hzupOQ5RCl++/EKDiHk1ofgUYnDoXSixx3LnBHqykCXfQtXHrx9WyuYwlVlPUAMG
-# sa6njtIToPCFJ1QRiJxb4fcpX0jlTnsqBhhphu/kCAg5ykqzIWArwNoY9IhacHoB
-# pThpZMLsbkjnyP38dsfW3UyNZSYDSaHHZR2quksC4cOqfkpfe6uoPXNFUwvKqA4F
-# GTVy/kt4w6lED4WG3Ie4r/M0N5Ald1IIbdIfpx3v6PWHhb54ILUAF1/dD+s6Thva
-# BDOpUT0rLv0aXGAeyX9Dmf0GwdQ4G2JuYZ8OoTlTo0IjsDtKd9Qz+EozT4+/sYVq
-# SbEbmZM9VdhQctqvcrJH4vZRLzTW/IcjsC6TDJJ8R6Ok7IR9OOwMaXM3Lbz4Jw7U
-# kL5V7cdd1F/aj3gL3kfVtPHcetFUH6GCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
+# AQkFMQ8XDTI2MDkwMjE4MzExOFowHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
+# ARUwLwYJKoZIhvcNAQkEMSIEIERXGQzlNYdLsOxVSR6ZWZ44OXjfWpulmANSUTAl
+# 5+NOMA0GCSqGSIb3DQEBAQUABIIBgGLUBW39YJ/4F8IarlpVaBfTJIL8qF2T+iND
+# fJWqEygNOQvaz3KoRsWF4kzPy1xrGDfSSlgFO93/cw+se6eZx95inY2ObaYQcmNB
+# wwKkuFRnIwK12eHzc7IHqgD0fEin6nVMAEp+J1a/FvAa3QTh3fVHYi9g9cjYSyXB
+# MJmLa1MbpIsEFaW/63LdINdotXTiqBzVBKetgvByDgTmV+ykQ3YoPIDcpl/hALkG
+# MdcTrFjOLem5ezgVme4FM9Luv2i8P0O0i4u7vdsHChemu6TQGSpMlXdmWcxZN5no
+# mp/aFPfxZbrvTEJrTMvDdc5r7m7Q7kcPlpcdeG18ThQekHFvNUK4qqKsrVoP+q6I
+# Ut9lsEx9/4SlhhWalbxBM5NabKW3hLhh2BvY3oz4J3kXZWybH+E0fP51Q0mDn3Zg
+# IlxuzwZjDR41UrgFLgMswgxsDxV2HsbpJni2rjnnR4lGMPkJ0AX17ysGUminwgwR
+# RF0uX6PBeniYQK4dGNWiAM3K1Q1LSaGCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
 # 6wIBATBqMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQKExhBc3NlY28gRGF0YSBTeXN0
 # ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBUaW1lc3RhbXBpbmcgMjAyMSBDQQIQ
 # KPB3wRw2vf5fdDJHcCcuAzANBglghkgBZQMEAgIFAKCCAVYwGgYJKoZIhvcNAQkD
-# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA5MDIxMDU1MDVaMDcG
+# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA5MDIxODMxMTlaMDcG
 # CyqGSIb3DQEJEAIvMSgwJjAkMCIEIIW+kOEK0kONfMkotq9IsJqyCBd87PiwEmxY
-# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDAOwjvKdGH31is8TGdA3xPMSeyxhAtnJlfb
-# 3QEf7x5JQvMlkMVRdc3SUxtoBTXEWR0wgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
+# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDClZOCR4+BNL2MzvwuEGj7gFlzMc9YK6rTF
+# zQtOs0HLpn8gh3an/8fmB5/nOGec4zkwgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
 # MIGGBBRXFGhBDKha80JO+RZKUTYQ9NONmDBuMFqkWDBWMQswCQYDVQQGEwJQTDEh
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gVGltZXN0YW1waW5nIDIwMjEgQ0ECECjwd8EcNr3+X3QyR3AnLgMwDQYJKoZI
-# hvcNAQEBBQAEggIAt2BZKeE46uYGJMaPeHn+HPT5csbDxtsk/VDjW+NL/caYZyr+
-# NZ+au/1Yr5WyvDs+Z/tviM4qGtJwJYzAFYRr+QkC8LHGvqOlUEx9pgr+nwWdJ7Mx
-# CnmC3mhQe6WsK2Wn4uTVl677LzMnOjt/fjhB5iCLlkbghHC+olFUHfsfFzJVFtLT
-# njowbzIQOeDhieV65bGA6GLHzhWQERmyC30W8T2cbsrV+4RJOcDs3fezU1k/afCy
-# FB0jlbrTH3ldwa7hU0Vv2SD+7m/+rhujHGSWojeEowdDdOK//DHhdwjHq1f+EH4K
-# ex6VTdhLFyVzNKMaD4dAtz7BFlx446KfioaGrpC8rQFQNAM3H0cKJ9mtcDF71tQa
-# THJLpqEMiI70Djzyp8lNb9JtgWYGsO95+ILdI5yy1SUM8UCphZKLODqEGErZQrzV
-# A0YGA1etRtaUfE8Zc5BSzW25oLAmb8yjLIouNGVHRr4yjH98li2oVABa2jXTB4Jg
-# oO2+r33znZcHR2K8zQXxJwgCKg3AygkDAj5IiMIRW3J0qiJK7TciSfkDEZ3ou241
-# 6P/j5tgOFeX+GdGb+qOtByMDeF3fK/Z5tpFHjacMlaThdWaBhVYajjZM4JRHQBRs
-# uhsYyVjU/Ieg2BX4O4pnCxNgULvne47u/onjp19GNu7cmJU0c1ISmhRT/ds=
+# hvcNAQEBBQAEggIAg6q3ZzPDmO0q2zmKwLmzwGlkWikxE1QaOErBDXsJwjucZydn
+# E0HeRDVBznOmL6gEzIq2oJS2v774k+msXfMTsy2r3TlDck5uTGiLPVnJp+dYicHE
+# oLQpz1EA+TPgBQ1FREhiGPCoXyilxJ5yfaPQmQcOX6V05zPSAIGefIEK93mYW28+
+# RfxpdCQwd7hLdUXbPoX5WtwlbicbS1Do+Xk+H+8Pqkc2pltsGr1kwBsG4fcSJfU0
+# W+MOfJ8acLrgyS10azMPNbYm93+sKzonutwKuamXdt/urruMpDEjSxQ6LDIOjsUx
+# 4Pk1pYD7pIJI/t/xBV4W9lo+mTPg30vAlumrKe3dTZo57BKhASgcXwXt/oSBjqdg
+# OwvaUGbx/ndJDDQELoyQNtWQSH/FYrhW1N8SSF8trznYIAw+M9gTTwQMYNDFMNcU
+# D9t7RzmgpneebsccfpdpYPJniD3G3KH3qrQNrgH0Ybc95jt4IFNyv7dg7R1L1JRE
+# JSPvtO4bTnEjhq5PtcQ5jkRZoTvs+09EhypI8qCLLvAZYV5S8TKIxi0h0X5Z0yT4
+# xh0Z+dk6l6DLwZjA2RWWGfoi9ZNLgCEAJcRoDmm9N/Om+bDRFpMN3qcBROvs7e/u
+# 4HKdukfsm432G3N+tjdmecSUbd+mJKNYvFZqXTRBLd70+e8DqYX20OHgPB4=
 # SIG # End signature block
