@@ -17,7 +17,7 @@
 .OUTPUTS
 C:\ProgramData\Debloat\Debloat.log
 .NOTES
-  Version:        5.6.3
+  Version:        5.6.4
   Author:         Andrew Taylor
   Twitter:        @AndrewTaylor_2
   WWW:            andrewstaylor.com
@@ -193,6 +193,7 @@ C:\ProgramData\Debloat\Debloat.log
   Change 30/08/2026 - Added support for arrays on test-criticalprocesses function
   Change 02/09/2026 - Dell Optimizer fix (again)
   Change 02/09/2026 - Uninstall change to wait for previous app to finish
+  Change 03/09/2026 - Various fixed from kitleyn (https://github.com/kitleyn)
 N/A
 #>
 
@@ -1997,13 +1998,13 @@ function UninstallAppFull
     $installedApps = Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*,
     HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |
         Where-Object { $null -ne $_.DisplayName } |
-        Select-Object DisplayName, UninstallString
+        Select-Object DisplayName, UninstallString, QuietUninstallString
 
     if ( [System.Security.Principal.WindowsIdentity]::GetCurrent().Name -ne 'NT AUTHORITY\SYSTEM')
     {
         $userInstalledApps = Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* |
             Where-Object { $null -ne $_.DisplayName } |
-            Select-Object DisplayName, UninstallString
+            Select-Object DisplayName, UninstallString, QuietUninstallString
     }
 
     # Wrapping the two arrays in @( ) forces them to resolve as arrays, including if they're NULL (such as if running in the system context and $userInstalledApps wasn't initialized above).
@@ -2038,8 +2039,9 @@ function UninstallAppFull
             # To refactorize back to a single uninstall call, remove here to the next comment. From here...
             try
             {
-                Start-Process $uninstaller -ArgumentList $uninstallArgs -wait -PassThru
-                Write-Output "Successfully called MSI Uninstaller for: $displayName"
+                ##Capture the exit code so failures are visible in the transcript
+                $proc = Start-Process $uninstaller -ArgumentList $uninstallArgs -wait -PassThru
+                Write-Output "MSI Uninstaller for $displayName exited with code: $($proc.ExitCode)"
             } catch
             {
                 Write-Output "Failed to call MSI Uninstaller for: $displayName"
@@ -2051,16 +2053,51 @@ function UninstallAppFull
         {
             Write-Output "EXE Uninstall detected"
             #Exe installer, run straight path
-            Write-Output "Retrieved Uninstall String: $uninstallString"
-            $parsedString = parseExeUninstall -exeString $uninstallString
-            $uninstallArgs = $parsedString | Select-Object -Skip 1
-            $uninstaller = $parsedString[0]
+            ##Prefer QuietUninstallString when the app registers one
+            $exeString = $uninstallString
+            if ($app.QuietUninstallString)
+            {
+                $exeString = $app.QuietUninstallString
+                Write-Output "QuietUninstallString found, using it instead"
+            }
+            Write-Output "Retrieved Uninstall String: $exeString"
+            ## @( ) forces an array so a bare exe path is not indexed character-by-character
+            $parsedString = @(parseExeUninstall -exeString $exeString)
+            $uninstallArgs = @($parsedString | Select-Object -Skip 1)
+            $uninstaller = $parsedString[0].Trim('"')
+
+            if (-not $app.QuietUninstallString)
+            {
+                ## No quiet string registered, so add the correct silent switch for known uninstaller types
+                if (($uninstallArgs -match '/uninstall') -and -not ($uninstallArgs -match '/quiet'))
+                {
+                    ## Burn bundle (e.g. Dell SupportAssist Remediation / OS Recovery Plugin)
+                    $uninstallArgs += '/quiet'
+                } elseif ($uninstaller -match 'SupportAssistUninstaller\.exe$')
+                {
+                    ## InstallShield-wrapped SupportAssist agent uninstaller
+                    if ($uninstallArgs -notcontains '/arp')
+                    {
+                        $uninstallArgs += '/arp'
+                    }
+                    $uninstallArgs += @('/S', '/v/qn')
+                } elseif (($uninstaller -match '(uninst|uninstall)\.exe$') -and ($uninstallArgs -notcontains '/S'))
+                {
+                    ## NSIS uninstaller
+                    $uninstallArgs += '/S'
+                }
+            }
 
             # To refactorize back to a single uninstall call, remove here to the next comment. From here...
             try
             {
-                Start-Process $uninstaller -ArgumentList $uninstallArgs -wait -PassThru
-                Write-Output "Successfully called EXE Uninstaller for: $displayName"
+                $exeStartParams = @{ FilePath = $uninstaller; Wait = $true; PassThru = $true }
+                if ($uninstallArgs.Count -gt 0)
+                {
+                    $exeStartParams['ArgumentList'] = $uninstallArgs
+                }
+                $proc = Start-Process @exeStartParams
+                Write-Output "EXE Uninstaller for $displayName exited with code: $($proc.ExitCode)"
             } catch
             {
                 Write-Output "Failed to call EXE Uninstaller for: $displayName"
@@ -2372,6 +2409,13 @@ if ($manufacturer -like "*HP*")
             Write-Output "Trying to uninstall via UninstallAppFull..."
             UninstallAppFull -appName $displayName
 
+            ##Skip the fallback if UninstallAppFull already removed the app
+            if (-not (Test-Path $package.PSPath))
+            {
+                Write-Output "$displayName removed by UninstallAppFull, skipping fallback"
+                continue
+            }
+
             # If UninstallAppFull doesn't work, fall back to direct uninstallation
             # Check if uninstall string exists and attempt uninstall
             if ($quietUninstallString)
@@ -2387,15 +2431,17 @@ if ($manufacturer -like "*HP*")
                     } else
                     {
                         # For EXE-based uninstalls
-                        $uninstallParts = $quietUninstallString -split ' ', 2
-                        $uninstallExe = $uninstallParts[0].Trim('"')
-                        $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1]
-                        } else
-                        { ""
-                        }
+                        ##Use parseExeUninstall so quoted paths containing spaces parse correctly
+                        $parsedQuiet = @(parseExeUninstall -exeString $quietUninstallString)
+                        $uninstallExe = $parsedQuiet[0].Trim('"')
+                        $uninstallArgs = @($parsedQuiet | Select-Object -Skip 1)
 
-                        Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
+                        $quietStartParams = @{ FilePath = $uninstallExe; Wait = $true; NoNewWindow = $true }
+                        if ($uninstallArgs.Count -gt 0)
+                        {
+                            $quietStartParams['ArgumentList'] = $uninstallArgs
+                        }
+                        Start-Process @quietStartParams
                     }
                     Write-Output "Quiet uninstall completed for: $displayName"
                 } catch
@@ -2420,21 +2466,23 @@ if ($manufacturer -like "*HP*")
                     } else
                     {
                         # For EXE-based uninstalls
-                        $uninstallParts = $uninstallString -split ' ', 2
-                        $uninstallExe = $uninstallParts[0].Trim('"')
-                        $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1]
-                        } else
-                        { ""
-                        }
+                        ##Use parseExeUninstall so quoted paths containing spaces parse correctly
+                        $parsedStandard = @(parseExeUninstall -exeString $uninstallString)
+                        $uninstallExe = $parsedStandard[0].Trim('"')
+                        $uninstallArgs = @($parsedStandard | Select-Object -Skip 1)
 
                         # Add silent parameters for common installers
                         if ($uninstallString -match "uninstall.exe|uninst.exe|setup.exe|installer.exe")
                         {
-                            $uninstallArgs += " /S /silent /quiet /uninstall"
+                            $uninstallArgs += @("/S", "/silent", "/quiet", "/uninstall")
                         }
 
-                        Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
+                        $standardStartParams = @{ FilePath = $uninstallExe; Wait = $true; NoNewWindow = $true }
+                        if ($uninstallArgs.Count -gt 0)
+                        {
+                            $standardStartParams['ArgumentList'] = $uninstallArgs
+                        }
+                        Start-Process @standardStartParams
                     }
                     Write-Output "Standard uninstall completed for: $displayName"
                 } catch
@@ -2481,6 +2529,7 @@ if ($manufacturer -like "*Dell*")
         "DellInc.DellPowerManager"
         "DellInc.DellDigitalDelivery"
         "DellInc.DellSupportAssistforPCs"
+        "Dell.SupportAssistforPCs"
         "DellInc.PartnerPromo"
         "Dell Command | Update"
         "Dell Command | Update for Windows Universal"
@@ -2518,7 +2567,9 @@ if ($manufacturer -like "*Dell*")
         "DellPair",
         "DellPairService",
         "DellSupportAssistRemediationServiceInstaller",
-        "DellUpdateSupportAssistPlugin"
+        "DellUpdateSupportAssistPlugin",
+        "SupportAssistAgent",
+        "SupportAssistClientUI"
     )
 
     foreach ($process in $processnames)
@@ -2532,6 +2583,51 @@ if ($manufacturer -like "*Dell*")
             write-output "Stopping Process $process"
             Get-Process -Name $process | Stop-Process -Force
             write-output "Process $process Stopped"
+        }
+    }
+
+    ##Stop SupportAssist services so their files are not locked during uninstall
+    Get-Service | Where-Object { $_.DisplayName -like "*SupportAssist*" -and $_.Status -eq "Running" } | ForEach-Object {
+        write-output "Stopping Service $($_.Name)"
+        Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue
+    }
+
+    ##Run the quiet uninstalls for the SupportAssist bundles before the generic loops so a
+    ##partially-run bundle uninstaller cannot block the correct quiet command later
+
+    ##Dell Dell SupportAssist Remediation
+    $dellSA = Get-ChildItem -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall, HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object { $_.DisplayName -match "Dell SupportAssist Remediation" } | Select-Object -Property QuietUninstallString
+
+    ForEach ($sa in $dellSA)
+    {
+        If ($sa.QuietUninstallString)
+        {
+            try
+            {
+                write-output "Removing Dell SupportAssist Remediation using its quiet uninstall string"
+                cmd.exe /c $sa.QuietUninstallString
+            } catch
+            {
+                Write-Warning "Failed to uninstall Dell Support Assist Remediation"
+            }
+        }
+    }
+
+    ##Dell Dell SupportAssist OS Recovery Plugin for Dell Update
+    $dellSA = Get-ChildItem -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall, HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object { $_.DisplayName -match "Dell SupportAssist OS Recovery Plugin for Dell Update" } | Select-Object -Property QuietUninstallString
+
+    ForEach ($sa in $dellSA)
+    {
+        If ($sa.QuietUninstallString)
+        {
+            try
+            {
+                write-output "Removing Dell SupportAssist OS Recovery Plugin for Dell Update using its quiet uninstall string"
+                cmd.exe /c $sa.QuietUninstallString
+            } catch
+            {
+                Write-Warning "Failed to uninstall Dell Support OS Recovery Plugin"
+            }
         }
     }
 
@@ -2635,6 +2731,13 @@ if ($manufacturer -like "*Dell*")
             Write-Output "Trying to uninstall via UninstallAppFull..."
             UninstallAppFull -appName $displayName
 
+            ##Skip the fallback if UninstallAppFull already removed the app
+            if (-not (Test-Path $package.PSPath))
+            {
+                Write-Output "$displayName removed by UninstallAppFull, skipping fallback"
+                continue
+            }
+
             # If UninstallAppFull doesn't work, fall back to direct uninstallation
             # Check if uninstall string exists and attempt uninstall
             if ($quietUninstallString)
@@ -2650,15 +2753,17 @@ if ($manufacturer -like "*Dell*")
                     } else
                     {
                         # For EXE-based uninstalls
-                        $uninstallParts = $quietUninstallString -split ' ', 2
-                        $uninstallExe = $uninstallParts[0].Trim('"')
-                        $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1]
-                        } else
-                        { ""
-                        }
+                        ##Use parseExeUninstall so quoted paths containing spaces parse correctly
+                        $parsedQuiet = @(parseExeUninstall -exeString $quietUninstallString)
+                        $uninstallExe = $parsedQuiet[0].Trim('"')
+                        $uninstallArgs = @($parsedQuiet | Select-Object -Skip 1)
 
-                        Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
+                        $quietStartParams = @{ FilePath = $uninstallExe; Wait = $true; NoNewWindow = $true }
+                        if ($uninstallArgs.Count -gt 0)
+                        {
+                            $quietStartParams['ArgumentList'] = $uninstallArgs
+                        }
+                        Start-Process @quietStartParams
                     }
                     Write-Output "Quiet uninstall completed for: $displayName"
                 } catch
@@ -2683,21 +2788,23 @@ if ($manufacturer -like "*Dell*")
                     } else
                     {
                         # For EXE-based uninstalls
-                        $uninstallParts = $uninstallString -split ' ', 2
-                        $uninstallExe = $uninstallParts[0].Trim('"')
-                        $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1]
-                        } else
-                        { ""
-                        }
+                        ##Use parseExeUninstall so quoted paths containing spaces parse correctly
+                        $parsedStandard = @(parseExeUninstall -exeString $uninstallString)
+                        $uninstallExe = $parsedStandard[0].Trim('"')
+                        $uninstallArgs = @($parsedStandard | Select-Object -Skip 1)
 
                         # Add silent parameters for common installers
                         if ($uninstallString -match "uninstall.exe|uninst.exe|setup.exe|installer.exe")
                         {
-                            $uninstallArgs += " /S /silent /quiet /uninstall"
+                            $uninstallArgs += @("/S", "/silent", "/quiet", "/uninstall")
                         }
 
-                        Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
+                        $standardStartParams = @{ FilePath = $uninstallExe; Wait = $true; NoNewWindow = $true }
+                        if ($uninstallArgs.Count -gt 0)
+                        {
+                            $standardStartParams['ArgumentList'] = $uninstallArgs
+                        }
+                        Start-Process @standardStartParams
                     }
                     Write-Output "Standard uninstall completed for: $displayName"
                 } catch
@@ -2728,6 +2835,7 @@ if ($manufacturer -like "*Dell*")
         {
             try
             {
+                write-output "Removing Dell Optimizer Core using its uninstall string with -silent"
                 cmd.exe /c $sa.UninstallString -silent
             } catch
             {
@@ -2745,6 +2853,7 @@ if ($manufacturer -like "*Dell*")
         {
             try
             {
+                write-output "Removing Dell Optimizer using its uninstall string with -silent"
                 cmd.exe /c $sa.UninstallString -silent
             } catch
             {
@@ -2752,44 +2861,6 @@ if ($manufacturer -like "*Dell*")
             }
         }
     }
-
-
-
-    ##Dell Dell SupportAssist Remediation
-    $dellSA = Get-ChildItem -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall, HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object { $_.DisplayName -match "Dell SupportAssist Remediation" } | Select-Object -Property QuietUninstallString
-
-    ForEach ($sa in $dellSA)
-    {
-        If ($sa.QuietUninstallString)
-        {
-            try
-            {
-                cmd.exe /c $sa.QuietUninstallString
-            } catch
-            {
-                Write-Warning "Failed to uninstall Dell Support Assist Remediation"
-            }
-        }
-    }
-
-    ##Dell Dell SupportAssist OS Recovery Plugin for Dell Update
-    $dellSA = Get-ChildItem -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall, HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object { $_.DisplayName -match "Dell SupportAssist OS Recovery Plugin for Dell Update" } | Select-Object -Property QuietUninstallString
-
-    ForEach ($sa in $dellSA)
-    {
-        If ($sa.QuietUninstallString)
-        {
-            try
-            {
-                cmd.exe /c $sa.QuietUninstallString
-            } catch
-            {
-                Write-Warning "Failed to uninstall Dell Support OS Recovery Plugin"
-            }
-        }
-    }
-
-
 
     ##Dell Display Manager
     $dellSA = Get-ChildItem -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall, HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall | Get-ItemProperty | Where-Object { $_.DisplayName -like "Dell*Display*Manager*" } | Select-Object -Property UninstallString
@@ -2800,6 +2871,7 @@ if ($manufacturer -like "*Dell*")
         {
             try
             {
+                write-output "Removing Dell Display Manager using its uninstall string with /S"
                 cmd.exe /c $sa.UninstallString /S
             } catch
             {
@@ -2812,6 +2884,7 @@ if ($manufacturer -like "*Dell*")
 
     try
     {
+        write-output "Attempting Dell Peripheral Manager uninstall (if present)"
         start-process c:\windows\system32\cmd.exe '/c "C:\Program Files\Dell\Dell Peripheral Manager\Uninstall.exe" /S'
     } catch
     {
@@ -2823,6 +2896,7 @@ if ($manufacturer -like "*Dell*")
 
     try
     {
+        write-output "Attempting Dell Pair uninstall (if present)"
         start-process c:\windows\system32\cmd.exe '/c "C:\Program Files\Dell\Dell Pair\Uninstall.exe" /S'
     } catch
     {
@@ -2832,6 +2906,7 @@ if ($manufacturer -like "*Dell*")
     ##Dell Update Assist Plugin
     try
     {
+        write-output "Attempting Dell Update SupportAssist Plugin uninstall (if present)"
         start-process c:\windows\system32\cmd.exe '/c "C:\ProgramData\Package Cache\{0a5aa116-8736-4571-b49d-739020affb16}\DellUpdateSupportAssistPlugin.exe" /uninstall /quiet'
     } catch
     {
@@ -2904,7 +2979,6 @@ if ($manufacturer -like "Lenovo")
     foreach ($process in $processnames)
     {
         write-output "Checking for Process $process"
-        wr ite-output "Checking for Process $process"
         if (Test-ProcessCritical -Process (Get-Process -Name $process -ErrorAction SilentlyContinue))
         {
             write-output "Process $process is critical and cannot be stopped."
@@ -3384,6 +3458,13 @@ if ($manufacturer -like "*Samsung*")
             Write-Output "Trying to uninstall via UninstallAppFull..."
             UninstallAppFull -appName $displayName
 
+            ##Skip the fallback if UninstallAppFull already removed the app
+            if (-not (Test-Path $package.PSPath))
+            {
+                Write-Output "$displayName removed by UninstallAppFull, skipping fallback"
+                continue
+            }
+
             # If UninstallAppFull doesn't work, fall back to direct uninstallation
             # Check if uninstall string exists and attempt uninstall
             if ($quietUninstallString)
@@ -3399,15 +3480,17 @@ if ($manufacturer -like "*Samsung*")
                     } else
                     {
                         # For EXE-based uninstalls
-                        $uninstallParts = $quietUninstallString -split ' ', 2
-                        $uninstallExe = $uninstallParts[0].Trim('"')
-                        $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1]
-                        } else
-                        { ""
-                        }
+                        ##Use parseExeUninstall so quoted paths containing spaces parse correctly
+                        $parsedQuiet = @(parseExeUninstall -exeString $quietUninstallString)
+                        $uninstallExe = $parsedQuiet[0].Trim('"')
+                        $uninstallArgs = @($parsedQuiet | Select-Object -Skip 1)
 
-                        Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
+                        $quietStartParams = @{ FilePath = $uninstallExe; Wait = $true; NoNewWindow = $true }
+                        if ($uninstallArgs.Count -gt 0)
+                        {
+                            $quietStartParams['ArgumentList'] = $uninstallArgs
+                        }
+                        Start-Process @quietStartParams
                     }
                     Write-Output "Quiet uninstall completed for: $displayName"
                 } catch
@@ -3432,21 +3515,23 @@ if ($manufacturer -like "*Samsung*")
                     } else
                     {
                         # For EXE-based uninstalls
-                        $uninstallParts = $uninstallString -split ' ', 2
-                        $uninstallExe = $uninstallParts[0].Trim('"')
-                        $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1]
-                        } else
-                        { ""
-                        }
+                        ##Use parseExeUninstall so quoted paths containing spaces parse correctly
+                        $parsedStandard = @(parseExeUninstall -exeString $uninstallString)
+                        $uninstallExe = $parsedStandard[0].Trim('"')
+                        $uninstallArgs = @($parsedStandard | Select-Object -Skip 1)
 
                         # Add silent parameters for common installers
                         if ($uninstallString -match "uninstall.exe|uninst.exe|setup.exe|installer.exe")
                         {
-                            $uninstallArgs += " /S /silent /quiet /uninstall"
+                            $uninstallArgs += @("/S", "/silent", "/quiet", "/uninstall")
                         }
 
-                        Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
+                        $standardStartParams = @{ FilePath = $uninstallExe; Wait = $true; NoNewWindow = $true }
+                        if ($uninstallArgs.Count -gt 0)
+                        {
+                            $standardStartParams['ArgumentList'] = $uninstallArgs
+                        }
+                        Start-Process @standardStartParams
                     }
                     Write-Output "Standard uninstall completed for: $displayName"
                 } catch
@@ -3622,6 +3707,13 @@ if ($manufacturer -like "*Acer*")
             Write-Output "Trying to uninstall via UninstallAppFull..."
             UninstallAppFull -appName $displayName
 
+            ##Skip the fallback if UninstallAppFull already removed the app
+            if (-not (Test-Path $package.PSPath))
+            {
+                Write-Output "$displayName removed by UninstallAppFull, skipping fallback"
+                continue
+            }
+
             # If UninstallAppFull doesn't work, fall back to direct uninstallation
             # Check if uninstall string exists and attempt uninstall
             if ($quietUninstallString)
@@ -3637,15 +3729,17 @@ if ($manufacturer -like "*Acer*")
                     } else
                     {
                         # For EXE-based uninstalls
-                        $uninstallParts = $quietUninstallString -split ' ', 2
-                        $uninstallExe = $uninstallParts[0].Trim('"')
-                        $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1]
-                        } else
-                        { ""
-                        }
+                        ##Use parseExeUninstall so quoted paths containing spaces parse correctly
+                        $parsedQuiet = @(parseExeUninstall -exeString $quietUninstallString)
+                        $uninstallExe = $parsedQuiet[0].Trim('"')
+                        $uninstallArgs = @($parsedQuiet | Select-Object -Skip 1)
 
-                        Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
+                        $quietStartParams = @{ FilePath = $uninstallExe; Wait = $true; NoNewWindow = $true }
+                        if ($uninstallArgs.Count -gt 0)
+                        {
+                            $quietStartParams['ArgumentList'] = $uninstallArgs
+                        }
+                        Start-Process @quietStartParams
                     }
                     Write-Output "Quiet uninstall completed for: $displayName"
                 } catch
@@ -3670,21 +3764,23 @@ if ($manufacturer -like "*Acer*")
                     } else
                     {
                         # For EXE-based uninstalls
-                        $uninstallParts = $uninstallString -split ' ', 2
-                        $uninstallExe = $uninstallParts[0].Trim('"')
-                        $uninstallArgs = if ($uninstallParts.Count -gt 1)
-                        { $uninstallParts[1]
-                        } else
-                        { ""
-                        }
+                        ##Use parseExeUninstall so quoted paths containing spaces parse correctly
+                        $parsedStandard = @(parseExeUninstall -exeString $uninstallString)
+                        $uninstallExe = $parsedStandard[0].Trim('"')
+                        $uninstallArgs = @($parsedStandard | Select-Object -Skip 1)
 
                         # Add silent parameters for common installers
                         if ($uninstallString -match "uninstall.exe|uninst.exe|setup.exe|installer.exe")
                         {
-                            $uninstallArgs += " /S /silent /quiet /uninstall"
+                            $uninstallArgs += @("/S", "/silent", "/quiet", "/uninstall")
                         }
 
-                        Start-Process -FilePath $uninstallExe -ArgumentList $uninstallArgs -Wait -NoNewWindow
+                        $standardStartParams = @{ FilePath = $uninstallExe; Wait = $true; NoNewWindow = $true }
+                        if ($uninstallArgs.Count -gt 0)
+                        {
+                            $standardStartParams['ArgumentList'] = $uninstallArgs
+                        }
+                        Start-Process @standardStartParams
                     }
                     Write-Output "Standard uninstall completed for: $displayName"
                 } catch
@@ -4133,8 +4229,8 @@ Stop-Transcript
 # SIG # Begin signature block
 # MIIgyAYJKoZIhvcNAQcCoIIguTCCILUCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCChU8fQbhMGqAK4
-# KFurRlXChqvVspY9KX/OSha6hEOmIaCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA5omRk5sDFzpNF
+# GezDc7ALQsUYKsaKq+Buig0QdXYdfKCCGXgwggZkMIIETKADAgECAhAS8XA+9Ydg
 # /3YhZAcZstc+MA0GCSqGSIb3DQEBCwUAMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQK
 # ExhBc3NlY28gRGF0YSBTeXN0ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBDb2Rl
 # IFNpZ25pbmcgMjAyMSBDQTAeFw0yNjA3MDIxNTEwMjdaFw0yNzA3MDIxNTEwMjZa
@@ -4274,36 +4370,36 @@ Stop-Transcript
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gQ29kZSBTaWduaW5nIDIwMjEgQ0ECEBLxcD71h2D/diFkBxmy1z4wDQYJYIZI
 # AWUDBAIBBQCggYgwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYJKoZIhvcN
-# AQkFMQ8XDTI2MDkwMjE4MzExOFowHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
-# ARUwLwYJKoZIhvcNAQkEMSIEIERXGQzlNYdLsOxVSR6ZWZ44OXjfWpulmANSUTAl
-# 5+NOMA0GCSqGSIb3DQEBAQUABIIBgGLUBW39YJ/4F8IarlpVaBfTJIL8qF2T+iND
-# fJWqEygNOQvaz3KoRsWF4kzPy1xrGDfSSlgFO93/cw+se6eZx95inY2ObaYQcmNB
-# wwKkuFRnIwK12eHzc7IHqgD0fEin6nVMAEp+J1a/FvAa3QTh3fVHYi9g9cjYSyXB
-# MJmLa1MbpIsEFaW/63LdINdotXTiqBzVBKetgvByDgTmV+ykQ3YoPIDcpl/hALkG
-# MdcTrFjOLem5ezgVme4FM9Luv2i8P0O0i4u7vdsHChemu6TQGSpMlXdmWcxZN5no
-# mp/aFPfxZbrvTEJrTMvDdc5r7m7Q7kcPlpcdeG18ThQekHFvNUK4qqKsrVoP+q6I
-# Ut9lsEx9/4SlhhWalbxBM5NabKW3hLhh2BvY3oz4J3kXZWybH+E0fP51Q0mDn3Zg
-# IlxuzwZjDR41UrgFLgMswgxsDxV2HsbpJni2rjnnR4lGMPkJ0AX17ysGUminwgwR
-# RF0uX6PBeniYQK4dGNWiAM3K1Q1LSaGCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
+# AQkFMQ8XDTI2MDkwMzEwMTAzMlowHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcC
+# ARUwLwYJKoZIhvcNAQkEMSIEIFLHF40dNt7A7rVxSpPDVaFKGjYdhqeiyLtn9eM3
+# 0rsQMA0GCSqGSIb3DQEBAQUABIIBgFUBFQv/vtWLcZF+ZZXdF9JdUBj1bfutfC4t
+# 2FXv4LUa3J46iqL5Ezs1FOc90MYjLaO0nSkYZuMV3HJYcNzOGquDPYqsxPJa1rNZ
+# 0dNEeqjDmL0J2kqBXmxcO14bEbksJLIHD+9OqOtaA4GhUsWxeIQWUVPYJEkL2Lxb
+# DrSDXuUWQ5mMon60UGnyrHc8i2shrWvvpKO9FvWBtoEc9at9hqT7IGCanPTSL9ly
+# b3lXy2Nudy8hkeXwk98KybRQ4vYmuy2Jxtw8PmfpDrS/gNSkruz0GsdYsEjvAQLd
+# 3BVbfS/3GC8Hfo5V4zUmzMhpIamQARLUXU0FEImftNgD4rYF2Pd6gyZha0L0uswR
+# O9iKqS64b92hwGG1qdfOMzk7Zzk3G45T22GBtEVTPMMCU77k0V1WFSe/VvJCS5Bv
+# 0cdlS3w2tOVlbeo8+e3Z7olPMta2xVXxwm2zffO3fYF1XgG5zvm9EbOOKl4v4Fh/
+# i+LRkegqFm6LgakQRYg2ZVCBVmmXVKGCBAIwggP+BgkqhkiG9w0BCQYxggPvMIID
 # 6wIBATBqMFYxCzAJBgNVBAYTAlBMMSEwHwYDVQQKExhBc3NlY28gRGF0YSBTeXN0
 # ZW1zIFMuQS4xJDAiBgNVBAMTG0NlcnR1bSBUaW1lc3RhbXBpbmcgMjAyMSBDQQIQ
 # KPB3wRw2vf5fdDJHcCcuAzANBglghkgBZQMEAgIFAKCCAVYwGgYJKoZIhvcNAQkD
-# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA5MDIxODMxMTlaMDcG
+# MQ0GCyqGSIb3DQEJEAEEMBwGCSqGSIb3DQEJBTEPFw0yNjA5MDMxMDEwMzNaMDcG
 # CyqGSIb3DQEJEAIvMSgwJjAkMCIEIIW+kOEK0kONfMkotq9IsJqyCBd87PiwEmxY
-# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDClZOCR4+BNL2MzvwuEGj7gFlzMc9YK6rTF
-# zQtOs0HLpn8gh3an/8fmB5/nOGec4zkwgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
+# 05EFJcQ8MD8GCSqGSIb3DQEJBDEyBDDVrKlYscOX47X/PQuzuPh1ZJvgOKIHcgl6
+# 6y6JXoml8DdWF/vVfRDu+p8iJChH2d8wgZ8GCyqGSIb3DQEJEAIMMYGPMIGMMIGJ
 # MIGGBBRXFGhBDKha80JO+RZKUTYQ9NONmDBuMFqkWDBWMQswCQYDVQQGEwJQTDEh
 # MB8GA1UEChMYQXNzZWNvIERhdGEgU3lzdGVtcyBTLkEuMSQwIgYDVQQDExtDZXJ0
 # dW0gVGltZXN0YW1waW5nIDIwMjEgQ0ECECjwd8EcNr3+X3QyR3AnLgMwDQYJKoZI
-# hvcNAQEBBQAEggIAg6q3ZzPDmO0q2zmKwLmzwGlkWikxE1QaOErBDXsJwjucZydn
-# E0HeRDVBznOmL6gEzIq2oJS2v774k+msXfMTsy2r3TlDck5uTGiLPVnJp+dYicHE
-# oLQpz1EA+TPgBQ1FREhiGPCoXyilxJ5yfaPQmQcOX6V05zPSAIGefIEK93mYW28+
-# RfxpdCQwd7hLdUXbPoX5WtwlbicbS1Do+Xk+H+8Pqkc2pltsGr1kwBsG4fcSJfU0
-# W+MOfJ8acLrgyS10azMPNbYm93+sKzonutwKuamXdt/urruMpDEjSxQ6LDIOjsUx
-# 4Pk1pYD7pIJI/t/xBV4W9lo+mTPg30vAlumrKe3dTZo57BKhASgcXwXt/oSBjqdg
-# OwvaUGbx/ndJDDQELoyQNtWQSH/FYrhW1N8SSF8trznYIAw+M9gTTwQMYNDFMNcU
-# D9t7RzmgpneebsccfpdpYPJniD3G3KH3qrQNrgH0Ybc95jt4IFNyv7dg7R1L1JRE
-# JSPvtO4bTnEjhq5PtcQ5jkRZoTvs+09EhypI8qCLLvAZYV5S8TKIxi0h0X5Z0yT4
-# xh0Z+dk6l6DLwZjA2RWWGfoi9ZNLgCEAJcRoDmm9N/Om+bDRFpMN3qcBROvs7e/u
-# 4HKdukfsm432G3N+tjdmecSUbd+mJKNYvFZqXTRBLd70+e8DqYX20OHgPB4=
+# hvcNAQEBBQAEggIARy1ag63l8DP5G6dmk9WNecu6wpK014fpPTZVuYHwR97ezRoG
+# cTkbOuX16PAFYJ58qgeGdeQfwA8xog3Jl5vXtE1Rf6wSEtNekXgwsoZLiPxqHECa
+# CkijkK5x0XFQBgSES23JO7SDGHKXIfsdRop0ve/I2hQMrv9z338/wYkQ3yZ8w86Y
+# 2DJocVFGCy0Zsb5bBoZfXFM9CO/NReObmRG8g3leNBRS4dziKUx7VNPv08fkl+4w
+# hUrdEzclcSzzMNMyjs0l0cx6OoEJ/3oczDYOTM+NPtqIR2bCCJv/9EEkT5jYFDV0
+# tqO7tM/oWeA8sLNvvlyMw8J+L1FkUPJN0pGSYlqY/Ahu6eXF8koE4/gj9tn7qY+B
+# EldKpRG+OOrae8BTy+G7CIFKGQXONwYsiwejao5bMkNlYFZ3Q49xmxYX6KHWXsDr
+# OilKvohtqqnpHguqmFUWccdtCmAmJ/q5ztEt07lEBoYsiUkBDvzWQFv2A7xGI/5P
+# EkZZCZhgUr2sIPTw+4PnIL4bTm8lS+4YSzyJGkLBAEni8c1CL5IqSQ6EtA5OfbZ3
+# WUURcQ4tsZLX/ceUUYs7CN4op/MM1gbG1xm/J8vVrSgRuV3w9stAYVAaW+IrV2h4
+# wI6JIq6vJwW0rbFSl+jsvz2lDHaOhKH+mTbZaKx7wWHjaD+jFsWcBb7zI7E=
 # SIG # End signature block
